@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, FileText, ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Service } from '../types';
+import { getStoredServices } from '../data/defaultServices';
 
 export const ServicesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -17,9 +18,37 @@ export const ServicesPage: React.FC = () => {
     if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
 
     fetch(url)
-      .then((res) => res.json())
-      .then((data) => setServices(Array.isArray(data) ? data : []))
-      .catch((err) => console.error(err))
+      .then((res) => {
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        throw new Error('API unavailable');
+      })
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setServices(data);
+        } else {
+          throw new Error('Empty API response');
+        }
+      })
+      .catch(() => {
+        // Fallback to client-side default services
+        let local = getStoredServices();
+        if (selectedCat !== 'ALL') {
+          local = local.filter((s) => s.category === selectedCat);
+        }
+        if (searchTerm) {
+          const term = searchTerm.toLowerCase();
+          local = local.filter(
+            (s) =>
+              s.title.toLowerCase().includes(term) ||
+              s.description.toLowerCase().includes(term) ||
+              (s.subcategory && s.subcategory.toLowerCase().includes(term))
+          );
+        }
+        setServices(local);
+      })
       .finally(() => setLoading(false));
   }, [selectedCat, searchTerm]);
 

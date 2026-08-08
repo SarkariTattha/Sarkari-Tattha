@@ -11,6 +11,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Service } from '../types';
+import { getStoredServices } from '../data/defaultServices';
 
 export const ServiceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,11 +22,23 @@ export const ServiceDetailPage: React.FC = () => {
   useEffect(() => {
     fetch(`/api/services/${id}`)
       .then((res) => {
-        if (!res.ok) throw new Error('Service details not found.');
-        return res.json();
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        throw new Error('API unavailable');
       })
       .then((data) => setService(data))
-      .catch((err) => setError(err.message))
+      .catch(() => {
+        const local = getStoredServices();
+        const found = local.find((s) => String(s.id) === String(id));
+        if (found) {
+          setService(found);
+          setError('');
+        } else {
+          setError('Service details not found.');
+        }
+      })
       .finally(() => setLoading(false));
   }, [id]);
 

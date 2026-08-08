@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Service } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { getStoredServices } from '../data/defaultServices';
 
 export const ApplyPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -49,9 +50,15 @@ export const ApplyPage: React.FC = () => {
 
   useEffect(() => {
     fetch('/api/services')
-      .then((res) => res.json())
+      .then((res) => {
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        throw new Error('API unavailable');
+      })
       .then((data) => {
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           setServices(data);
           if (initialServiceId) {
             const found = data.find((s: Service) => String(s.id) === String(initialServiceId));
@@ -60,9 +67,21 @@ export const ApplyPage: React.FC = () => {
             setSelectedServiceId(String(data[0].id));
             setSelectedService(data[0]);
           }
+        } else {
+          throw new Error('Empty services');
         }
       })
-      .catch((err) => console.error(err));
+      .catch(() => {
+        const local = getStoredServices();
+        setServices(local);
+        if (initialServiceId) {
+          const found = local.find((s: Service) => String(s.id) === String(initialServiceId));
+          if (found) setSelectedService(found);
+        } else if (local.length > 0) {
+          setSelectedServiceId(String(local[0].id));
+          setSelectedService(local[0]);
+        }
+      });
   }, [initialServiceId]);
 
   const handleServiceChange = (idStr: string) => {

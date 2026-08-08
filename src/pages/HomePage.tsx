@@ -29,6 +29,7 @@ import {
   UploadCloud
 } from 'lucide-react';
 import { Service, FAQ } from '../types';
+import { getStoredServices } from '../data/defaultServices';
 
 export const HomePage: React.FC = () => {
   const { settings } = useSettings();
@@ -38,14 +39,34 @@ export const HomePage: React.FC = () => {
 
   useEffect(() => {
     fetch('/api/services?limit=6')
-      .then((res) => res.json())
-      .then((data) => setFeaturedServices(Array.isArray(data) ? data.slice(0, 6) : []))
-      .catch((err) => console.error(err));
+      .then((res) => {
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        throw new Error('API unavailable');
+      })
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setFeaturedServices(data.slice(0, 6));
+        } else {
+          throw new Error('Empty API response');
+        }
+      })
+      .catch(() => {
+        setFeaturedServices(getStoredServices().slice(0, 6));
+      });
 
     fetch('/api/admin/faqs')
-      .then((res) => res.json())
+      .then((res) => {
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
+          return res.json();
+        }
+        return [];
+      })
       .then((data) => setFaqs(Array.isArray(data) ? data : []))
-      .catch((err) => console.error(err));
+      .catch(() => setFaqs([]));
   }, []);
 
   return (
