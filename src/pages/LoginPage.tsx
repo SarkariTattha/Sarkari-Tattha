@@ -97,38 +97,6 @@ export const LoginPage: React.FC = () => {
           </Link>
         </p>
       </form>
-
-      {/* Demo Credentials Helper Box */}
-      <div className="bg-slate-900 text-white p-5 rounded-3xl space-y-3">
-        <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider text-center">
-          One-Click Demo Roles Login
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => handleDemo('admin')}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-center space-y-1 transition text-[11px]"
-          >
-            <ShieldAlert className="w-4 h-4 text-emerald-400 mx-auto" />
-            <span className="block font-bold text-white">Admin</span>
-          </button>
-
-          <button
-            onClick={() => handleDemo('staff')}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-center space-y-1 transition text-[11px]"
-          >
-            <Users className="w-4 h-4 text-emerald-400 mx-auto" />
-            <span className="block font-bold text-white">Staff</span>
-          </button>
-
-          <button
-            onClick={() => handleDemo('customer')}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-center space-y-1 transition text-[11px]"
-          >
-            <User className="w-4 h-4 text-emerald-400 mx-auto" />
-            <span className="block font-bold text-white">Customer</span>
-          </button>
-        </div>
-      </div>
     </div>
   );
 };

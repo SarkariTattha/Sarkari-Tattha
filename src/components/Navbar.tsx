@@ -59,12 +59,6 @@ export const Navbar: React.FC = () => {
             <a href={`tel:${settings.phone || '+919876543210'}`} className="font-extrabold text-slate-900 hover:text-orange-600 transition text-[11px]">
               Helpline: {settings.phone || '+91 98765 43210'}
             </a>
-            <button
-              onClick={() => setDemoModalOpen(true)}
-              className="px-2.5 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-black text-[10px] uppercase tracking-wider transition shadow-xs"
-            >
-              Demo Roles Login
-            </button>
           </div>
         </div>
       </div>
@@ -287,81 +281,10 @@ export const Navbar: React.FC = () => {
                   </Link>
                 </div>
               )}
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setDemoModalOpen(true);
-                }}
-                className="w-full text-center py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 rounded-lg"
-              >
-                Switch Demo Role (Admin / Staff / Customer)
-              </button>
             </div>
           </div>
         )}
       </header>
-
-      {/* Quick Demo Login Modal */}
-      {demoModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl relative">
-            <button
-              onClick={() => setDemoModalOpen(false)}
-              className="absolute top-4 right-4 p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="text-center mb-6">
-              <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900">Instant Demo Role Selection</h3>
-              <p className="text-xs text-slate-500 mt-1">Select a role to test the complete application features instantly:</p>
-            </div>
-
-            <div className="space-y-3">
-              <button
-                onClick={() => handleDemoSelect('admin')}
-                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-emerald-600 hover:bg-emerald-50/50 transition flex items-start space-x-3 group"
-              >
-                <div className="p-2.5 bg-slate-900 text-white rounded-xl group-hover:bg-emerald-600 transition">
-                  <ShieldAlert className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">Administrator Role</p>
-                  <p className="text-xs text-slate-500">Full control over customers, staff, payments, expenses, reports & settings.</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleDemoSelect('staff')}
-                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-emerald-600 hover:bg-emerald-50/50 transition flex items-start space-x-3 group"
-              >
-                <div className="p-2.5 bg-emerald-700 text-white rounded-xl group-hover:bg-emerald-600 transition">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">Staff Operator Role</p>
-                  <p className="text-xs text-slate-500">Manage assigned service requests, upload documents, collect payments & expenses.</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleDemoSelect('customer')}
-                className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-emerald-600 hover:bg-emerald-50/50 transition flex items-start space-x-3 group"
-              >
-                <div className="p-2.5 bg-teal-600 text-white rounded-xl group-hover:bg-emerald-600 transition">
-                  <User className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">Customer User Role</p>
-                  <p className="text-xs text-slate-500">Apply for services, track live applications, view payment receipts & notifications.</p>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };
