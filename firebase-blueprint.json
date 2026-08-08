@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User accounts and authentication records",
+      "fields": {
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "description": "Email address" },
+        "role": { "type": "string", "description": "Role (admin, staff, customer)" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "createdAt": { "type": "string", "description": "Registration date" }
+      }
+    },
+    "applications": {
+      "title": "Applications",
+      "description": "Service applications submitted by citizens or staff",
+      "fields": {
+        "serviceId": { "type": "string", "description": "ID of service applied for" },
+        "serviceName": { "type": "string", "description": "Name of service" },
+        "applicantName": { "type": "string", "description": "Applicant full name" },
+        "mobile": { "type": "string", "description": "Mobile number" },
+        "aadhaarLast4": { "type": "string", "description": "Last 4 digits of Aadhaar" },
+        "status": { "type": "string", "description": "Application status (Pending, Processing, Completed, Rejected)" },
+        "fee": { "type": "number", "description": "Service fee charged" },
+        "receiptNo": { "type": "string", "description": "Generated receipt number" },
+        "createdAt": { "type": "string", "description": "Submission timestamp" }
+      }
+    },
+    "services": {
+      "title": "Services",
+      "description": "Catalog of government e-services and digital banking services",
+      "fields": {
+        "name": { "type": "string", "description": "Service title" },
+        "category": { "type": "string", "description": "Category name" },
+        "fee": { "type": "number", "description": "Service charge in INR" },
+        "processingTime": { "type": "string", "description": "Estimated processing timeframe" },
+        "description": { "type": "string", "description": "Detailed description" },
+        "requiredDocuments": { "type": "array", "description": "List of required documents" },
+        "popular": { "type": "boolean", "description": "Flag for featured on homepage" }
+      }
+    },
+    "expenses": {
+      "title": "Expenses",
+      "description": "Center operational and shop expenses",
+      "fields": {
+        "title": { "type": "string", "description": "Expense title or vendor" },
+        "category": { "type": "string", "description": "Expense category" },
+        "amount": { "type": "number", "description": "Amount spent in INR" },
+        "date": { "type": "string", "description": "Expense date" },
+        "notes": { "type": "string", "description": "Additional notes" }
+      }
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Site branding, logo, contact details, and banner configuration",
+      "fields": {
+        "center_name": { "type": "string", "description": "Center name" },
+        "tagline": { "type": "string", "description": "Center subtitle or slogan" },
+        "logo_url": { "type": "string", "description": "URL or base64 of center logo" },
+        "hero_photo_url": { "type": "string", "description": "Hero section photo URL" },
+        "about_photo_url": { "type": "string", "description": "About page banner photo URL" },
+        "vle_name": { "type": "string", "description": "VLE / Center Manager name" },
+        "phone": { "type": "string", "description": "Helpline phone number" },
+        "whatsapp": { "type": "string", "description": "WhatsApp number" },
+        "email": { "type": "string", "description": "Support email address" },
+        "address": { "type": "string", "description": "Full physical shop address" },
+        "opening_hours": { "type": "string", "description": "Opening hours" },
+        "upi_id": { "type": "string", "description": "UPI payment ID" },
+        "notice_banner": { "type": "string", "description": "Top announcement notice" },
+        "disclaimer_text": { "type": "string", "description": "Footer legal disclaimer" }
+      }
+    },
+    "center_photos": {
+      "title": "Center Photos",
+      "description": "Infrastructure, counter, and service photo gallery",
+      "fields": {
+        "title": { "type": "string", "description": "Photo title" },
+        "description": { "type": "string", "description": "Photo description" },
+        "photo_url": { "type": "string", "description": "Photo URL or data" },
+        "createdAt": { "type": "string", "description": "Upload timestamp" }
+      }
+    }
+  }
+}

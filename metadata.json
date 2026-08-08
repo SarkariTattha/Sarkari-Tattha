@@ -1,0 +1,6 @@
+{
+  "name": "Sarkari Tattha",
+  "description": "Sarkari Tattha - Comprehensive CSC Common Service Center and CSP Banking Service Point application with service applications, document uploads, live tracking, payment management, and admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
