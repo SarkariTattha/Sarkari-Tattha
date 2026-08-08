@@ -45,18 +45,18 @@ export const Navbar: React.FC = () => {
       <div className="bg-slate-100 text-slate-800 text-xs py-2 px-4 border-b border-orange-200">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center space-y-1 sm:space-y-0">
           <div className="flex items-center space-x-3">
-            <span className="inline-flex items-center text-orange-700 font-extrabold text-[11px] uppercase tracking-wider">
+            <span className="inline-flex items-center text-orange-700 font-medium text-[11px] uppercase tracking-wider">
               <CheckCircle2 className="w-3.5 h-3.5 mr-1.5 text-orange-600" /> {settings.notice_banner || 'Authorized CSC & Banking Service Point'}
             </span>
             {settings.opening_hours && (
               <>
                 <span className="hidden md:inline text-slate-300">•</span>
-                <span className="hidden md:inline font-bold text-slate-600 text-[11px]">{settings.opening_hours}</span>
+                <span className="hidden md:inline font-medium text-slate-600 text-[11px]">{settings.opening_hours}</span>
               </>
             )}
           </div>
           <div className="flex items-center space-x-4">
-            <a href={`tel:${settings.phone || '+919876543210'}`} className="font-extrabold text-slate-900 hover:text-orange-600 transition text-[11px]">
+            <a href={`tel:${settings.phone || '+919876543210'}`} className="font-medium text-slate-900 hover:text-orange-600 transition text-[11px]">
               Helpline: {settings.phone || '+91 98765 43210'}
             </a>
           </div>
@@ -76,7 +76,7 @@ export const Navbar: React.FC = () => {
             <nav className="hidden lg:flex items-center space-x-1">
               <Link
                 to="/"
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium uppercase tracking-wider transition ${
                   isActive('/') ? 'theme-bg-primary text-white' : 'theme-card-text hover:theme-bg-light hover:theme-text-primary'
                 }`}
               >
@@ -85,7 +85,7 @@ export const Navbar: React.FC = () => {
 
               <Link
                 to="/services"
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium uppercase tracking-wider transition ${
                   isActive('/services') && !location.search.includes('CSP') ? 'theme-bg-primary text-white' : 'theme-card-text hover:theme-bg-light hover:theme-text-primary'
                 }`}
               >
@@ -94,7 +94,7 @@ export const Navbar: React.FC = () => {
 
               <Link
                 to="/services?category=CSP"
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium uppercase tracking-wider transition ${
                   location.search.includes('CSP') ? 'theme-bg-primary text-white' : 'theme-card-text hover:theme-bg-light hover:theme-text-primary'
                 }`}
               >
@@ -103,7 +103,7 @@ export const Navbar: React.FC = () => {
 
               <Link
                 to="/track"
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition flex items-center space-x-1.5 ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium uppercase tracking-wider transition flex items-center space-x-1.5 ${
                   isActive('/track') ? 'theme-bg-primary text-white' : 'theme-card-text hover:theme-bg-light hover:theme-text-primary'
                 }`}
               >
@@ -113,7 +113,7 @@ export const Navbar: React.FC = () => {
 
               <Link
                 to="/appointments"
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium uppercase tracking-wider transition ${
                   isActive('/appointments') ? 'theme-bg-primary text-white' : 'theme-card-text hover:theme-bg-light hover:theme-text-primary'
                 }`}
               >
@@ -122,7 +122,7 @@ export const Navbar: React.FC = () => {
 
               <Link
                 to="/contact"
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-medium uppercase tracking-wider transition ${
                   isActive('/contact') ? 'theme-bg-primary text-white' : 'theme-card-text hover:theme-bg-light hover:theme-text-primary'
                 }`}
               >
@@ -136,7 +136,7 @@ export const Navbar: React.FC = () => {
 
               <Link
                 to="/apply"
-                className="flex items-center space-x-1.5 px-4 py-2.5 theme-bg-primary theme-bg-primary-hover text-white font-extrabold tracking-wider uppercase rounded-xl shadow-md hover:shadow-lg transition transform active:scale-95 text-xs"
+                className="flex items-center space-x-1.5 px-4 py-2.5 theme-bg-primary theme-bg-primary-hover text-white font-medium tracking-wider uppercase rounded-xl shadow-md hover:shadow-lg transition transform active:scale-95 text-xs"
               >
                 <PlusCircle className="w-4 h-4" />
                 <span>Apply Now</span>
@@ -146,9 +146,9 @@ export const Navbar: React.FC = () => {
                 <div className="flex items-center space-x-2 border-l border-slate-200 pl-3">
                   <Link
                     to={user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/customer'}
-                    className="flex items-center space-x-2 px-3 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold text-xs transition uppercase tracking-wide"
+                    className="flex items-center space-x-2 px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-medium text-xs transition uppercase tracking-wide shadow-xs"
                   >
-                    <LayoutDashboard className="w-4 h-4 text-emerald-400" />
+                    <LayoutDashboard className="w-4 h-4 text-emerald-200" />
                     <span>
                       {user.role === 'admin' ? 'Admin Portal' : user.role === 'staff' ? 'Staff Portal' : 'My Portal'}
                     </span>
@@ -165,13 +165,13 @@ export const Navbar: React.FC = () => {
                 <div className="flex items-center space-x-2 border-l border-slate-200 pl-3">
                   <Link
                     to="/login"
-                    className="px-3.5 py-2 text-slate-800 font-extrabold text-xs uppercase tracking-wider hover:text-emerald-700 transition"
+                    className="px-3.5 py-2 text-slate-800 font-medium text-xs uppercase tracking-wider hover:text-emerald-700 transition"
                   >
                     Login
                   </Link>
                   <Link
                     to="/register"
-                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition"
+                    className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-medium text-xs uppercase tracking-wider rounded-xl transition shadow-xs"
                   >
                     Register
                   </Link>

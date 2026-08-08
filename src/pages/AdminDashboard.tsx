@@ -46,31 +46,7 @@ import { Service, Application, User, Expense } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { CenterGallerySection } from '../components/CenterGallerySection';
 import { getStoredServices, saveStoredServices } from '../data/defaultServices';
-
-function getAdminFallbackUsers(): User[] {
-  const defaultUsers: User[] = [
-    { id: 1, name: 'Center Administrator', email: 'admin@csc.com', mobile: '9876543210', role: 'admin', address: 'Digital Seva Kendra HQ', created_at: new Date().toISOString(), is_active: 1 },
-    { id: 2, name: 'Operator Staff', email: 'staff@csc.com', mobile: '9876543211', role: 'staff', address: 'Counter 1', created_at: new Date().toISOString(), is_active: 1 },
-    { id: 3, name: 'Rahul Sharma', email: 'customer@csc.com', mobile: '9876543212', role: 'customer', address: 'Kolkata, WB', created_at: new Date().toISOString(), is_active: 1 }
-  ];
-  try {
-    const raw = localStorage.getItem('csc_registered_users');
-    if (raw) {
-      const reg: Array<{ email: string; pass: string; user: User }> = JSON.parse(raw);
-      const regUsers = reg.map(r => r.user);
-      const existingEmails = new Set(defaultUsers.map(u => u.email.toLowerCase()));
-      for (const u of regUsers) {
-        if (!existingEmails.has(u.email.toLowerCase())) {
-          defaultUsers.push(u);
-          existingEmails.add(u.email.toLowerCase());
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to parse fallback registered users:', e);
-  }
-  return defaultUsers;
-}
+import { getStoredUsers, setUserActiveStatus, deleteStoredUser, saveStoredUser, processFetchedUsers } from '../utils/userStorage';
 
 export const AdminDashboard: React.FC = () => {
   const { token, user: currentUser } = useAuth();
@@ -156,7 +132,7 @@ export const AdminDashboard: React.FC = () => {
         setServices(Array.isArray(sv) && sv.length > 0 ? sv : getStoredServices());
         setApplications(Array.isArray(ap) ? ap : []);
         setPendingApps(Array.isArray(pd) ? pd : []);
-        setUsers(Array.isArray(us) && us.length > 0 ? us : getAdminFallbackUsers());
+        setUsers(Array.isArray(us) && us.length > 0 ? processFetchedUsers(us) : getStoredUsers());
         setExpenses(Array.isArray(ex) ? ex : []);
         setCenterSettings(set || {});
         setLogs(Array.isArray(lg) ? lg : []);
@@ -164,7 +140,7 @@ export const AdminDashboard: React.FC = () => {
       .catch((err) => {
         console.error('Fetch admin data catch block:', err);
         setServices(getStoredServices());
-        setUsers(getAdminFallbackUsers());
+        setUsers(getStoredUsers());
       })
       .finally(() => setLoading(false));
   };
@@ -239,16 +215,19 @@ export const AdminDashboard: React.FC = () => {
   // Handle Create User
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = usrEmail.toLowerCase().trim();
     const newUserObj: User = {
       id: Date.now(),
       name: usrName,
-      email: usrEmail.toLowerCase().trim(),
+      email: cleanEmail,
       mobile: usrMobile,
       role: usrRole,
       address: '',
       is_active: 1,
       created_at: new Date().toISOString()
     };
+
+    saveStoredUser(newUserObj, usrPassword);
 
     try {
       const res = await fetch('/api/admin/users', {
@@ -259,7 +238,7 @@ export const AdminDashboard: React.FC = () => {
         },
         body: JSON.stringify({
           name: usrName,
-          email: usrEmail,
+          email: cleanEmail,
           mobile: usrMobile,
           password: usrPassword,
           role: usrRole
@@ -280,33 +259,23 @@ export const AdminDashboard: React.FC = () => {
       }
       throw new Error('API unavailable');
     } catch (err) {
-      // Fallback for client-side storage
-      try {
-        let raw = localStorage.getItem('csc_registered_users');
-        let reg = raw ? JSON.parse(raw) : [];
-        if (reg.some((r: any) => r.email.toLowerCase() === usrEmail.toLowerCase().trim())) {
-          alert('An account with this email already exists.');
-          return;
-        }
-        reg.push({ email: usrEmail.toLowerCase().trim(), pass: usrPassword, user: newUserObj });
-        localStorage.setItem('csc_registered_users', JSON.stringify(reg));
-
-        setUsers(prev => [newUserObj, ...prev]);
-        alert(`${usrRole.toUpperCase()} account created successfully!`);
-        setUserModalOpen(false);
-        setUsrName('');
-        setUsrEmail('');
-        setUsrMobile('');
-        setUsrPassword('');
-      } catch (lErr) {
-        alert('Failed to save user account.');
-      }
+      setUsers(getStoredUsers());
+      alert(`${usrRole.toUpperCase()} account created successfully!`);
+      setUserModalOpen(false);
+      setUsrName('');
+      setUsrEmail('');
+      setUsrMobile('');
+      setUsrPassword('');
     }
   };
 
   // Handle Toggle User Active Status (Deactivate / Activate)
   const handleToggleUserStatus = async (targetUser: User) => {
-    if (targetUser.id === currentUser?.id) {
+    const isUserSelf = Boolean(
+      (currentUser?.email && targetUser.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      targetUser.id === currentUser?.id
+    );
+    if (isUserSelf) {
       alert('You cannot deactivate your own logged-in admin account.');
       return;
     }
@@ -318,6 +287,9 @@ export const AdminDashboard: React.FC = () => {
     if (!window.confirm(`Are you sure you want to ${actionText} the account for ${targetUser.name} (${targetUser.email})?`)) {
       return;
     }
+
+    setUserActiveStatus(targetUser, newStatus);
+    setUsers(getStoredUsers());
 
     try {
       const res = await fetch(`/api/admin/users/${targetUser.id}/status`, {
@@ -336,30 +308,19 @@ export const AdminDashboard: React.FC = () => {
         fetchAdminData();
         return;
       }
-      throw new Error('API unavailable');
+      alert(`Account ${actionText}d successfully.`);
     } catch (err) {
-      // Fallback local update
-      setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, is_active: newStatus ? 1 : 0 } : u));
-      try {
-        let raw = localStorage.getItem('csc_registered_users');
-        if (raw) {
-          let reg = JSON.parse(raw);
-          reg = reg.map((r: any) => {
-            if (r.user && r.user.id === targetUser.id) {
-              r.user.is_active = newStatus ? 1 : 0;
-            }
-            return r;
-          });
-          localStorage.setItem('csc_registered_users', JSON.stringify(reg));
-        }
-      } catch (e) {}
       alert(`Account ${actionText}d successfully.`);
     }
   };
 
   // Handle Delete User Account
   const handleDeleteUser = async (targetUser: User) => {
-    if (targetUser.id === currentUser?.id) {
+    const isUserSelf = Boolean(
+      (currentUser?.email && targetUser.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      targetUser.id === currentUser?.id
+    );
+    if (isUserSelf) {
       alert('You cannot delete your own logged-in admin account.');
       return;
     }
@@ -371,6 +332,9 @@ export const AdminDashboard: React.FC = () => {
     ) {
       return;
     }
+
+    deleteStoredUser(targetUser);
+    setUsers(getStoredUsers());
 
     try {
       const res = await fetch(`/api/admin/users/${targetUser.id}`, {
@@ -387,18 +351,8 @@ export const AdminDashboard: React.FC = () => {
         fetchAdminData();
         return;
       }
-      throw new Error('API unavailable');
+      alert('User account deleted successfully.');
     } catch (err) {
-      // Fallback local delete
-      setUsers(prev => prev.filter(u => u.id !== targetUser.id));
-      try {
-        let raw = localStorage.getItem('csc_registered_users');
-        if (raw) {
-          let reg = JSON.parse(raw);
-          reg = reg.filter((r: any) => !(r.user && r.user.id === targetUser.id));
-          localStorage.setItem('csc_registered_users', JSON.stringify(reg));
-        }
-      } catch (e) {}
       alert('User account deleted successfully.');
     }
   };
@@ -420,6 +374,19 @@ export const AdminDashboard: React.FC = () => {
   const handleSaveEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+
+    const updatedUser: User = {
+      ...editingUser,
+      name: editUsrName,
+      email: editUsrEmail.toLowerCase().trim(),
+      mobile: editUsrMobile,
+      address: editUsrAddress,
+      role: editUsrRole,
+      is_active: editUsrActive ? 1 : 0
+    };
+
+    saveStoredUser(updatedUser, editUsrPassword);
+    setUsers(getStoredUsers());
 
     try {
       const res = await fetch(`/api/admin/users/${editingUser.id}`, {
@@ -447,34 +414,10 @@ export const AdminDashboard: React.FC = () => {
         fetchAdminData();
         return;
       }
-      throw new Error('API unavailable');
+      alert('User account updated successfully.');
+      setEditUserModalOpen(false);
+      setEditingUser(null);
     } catch (err) {
-      // Local fallback update
-      const updatedUser: User = {
-        ...editingUser,
-        name: editUsrName,
-        email: editUsrEmail,
-        mobile: editUsrMobile,
-        address: editUsrAddress,
-        role: editUsrRole,
-        is_active: editUsrActive ? 1 : 0
-      };
-      setUsers(prev => prev.map(u => u.id === editingUser.id ? updatedUser : u));
-      try {
-        let raw = localStorage.getItem('csc_registered_users');
-        if (raw) {
-          let reg = JSON.parse(raw);
-          reg = reg.map((r: any) => {
-            if (r.user && r.user.id === editingUser.id) {
-              r.user = updatedUser;
-              r.email = editUsrEmail.toLowerCase();
-              if (editUsrPassword) r.pass = editUsrPassword;
-            }
-            return r;
-          });
-          localStorage.setItem('csc_registered_users', JSON.stringify(reg));
-        }
-      } catch (e) {}
       alert('User account updated successfully.');
       setEditUserModalOpen(false);
       setEditingUser(null);
@@ -593,20 +536,20 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       {/* Header */}
-      <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl">
+      <div className="bg-gradient-to-r from-emerald-700 to-teal-700 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
         <div>
-          <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full">
+          <span className="px-3 py-1 bg-emerald-500/20 text-emerald-200 text-xs font-bold rounded-full">
             CSC + CSP Control Center
           </span>
           <h1 className="text-2xl sm:text-3xl font-bold mt-1">Master Admin Panel</h1>
-          <p className="text-xs text-slate-300">Complete control over services, users, finances, and system settings</p>
+          <p className="text-xs text-emerald-100">Complete control over services, users, finances, and system settings</p>
         </div>
 
         <button
           onClick={fetchAdminData}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5"
+          className="px-4 py-2 bg-emerald-800/80 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 shadow-xs"
         >
-          <RefreshCw className="w-4 h-4 text-emerald-400" />
+          <RefreshCw className="w-4 h-4 text-emerald-300" />
           <span>Refresh Data</span>
         </button>
       </div>
@@ -659,7 +602,7 @@ export const AdminDashboard: React.FC = () => {
             onClick={() => setActiveTab(tab.id as any)}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap ${
               activeTab === tab.id
-                ? 'bg-slate-900 text-white shadow-sm'
+                ? 'bg-emerald-700 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
@@ -941,7 +884,10 @@ export const AdminDashboard: React.FC = () => {
                     })
                     .map((u) => {
                       const isActive = u.is_active !== 0;
-                      const isSelf = u.id === currentUser?.id;
+                      const isSelf = Boolean(
+                        (currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                        u.id === currentUser?.id
+                      );
 
                       return (
                         <tr key={u.id} className="hover:bg-slate-50/80 transition">
@@ -1096,7 +1042,7 @@ export const AdminDashboard: React.FC = () => {
             <div className="pt-4 border-t border-slate-200 flex gap-3">
               <button
                 onClick={() => window.print()}
-                className="px-5 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl flex items-center space-x-2"
+                className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-2 shadow-xs transition"
               >
                 <Printer className="w-4 h-4" />
                 <span>Print Official Summary Report</span>

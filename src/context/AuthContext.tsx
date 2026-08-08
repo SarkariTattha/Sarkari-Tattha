@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
+import { authenticateStoredUser, saveStoredUser, getStoredUsers } from '../utils/userStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -14,30 +15,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEFAULT_STATIC_USERS: Record<string, { pass: string; user: User }> = {
-  'admin@csc.com': {
-    pass: 'admin123',
-    user: { id: 1, name: 'Center Administrator', email: 'admin@csc.com', mobile: '9876543210', role: 'admin', address: 'Digital Seva Kendra HQ', created_at: new Date().toISOString() }
-  },
-  'staff@csc.com': {
-    pass: 'staff123',
-    user: { id: 2, name: 'Operator Staff', email: 'staff@csc.com', mobile: '9876543211', role: 'staff', address: 'Counter 1', created_at: new Date().toISOString() }
-  },
-  'customer@csc.com': {
-    pass: 'customer123',
-    user: { id: 3, name: 'Rahul Sharma', email: 'customer@csc.com', mobile: '9876543212', role: 'customer', address: 'Kolkata, WB', created_at: new Date().toISOString() }
-  }
-};
-
-function getLocalRegisteredUsers(): Array<{ email: string; pass: string; user: User }> {
-  try {
-    const raw = localStorage.getItem('csc_registered_users');
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('csc_token'));
@@ -49,7 +26,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const storedUser = localStorage.getItem('csc_local_user');
           if (storedUser) {
-            setUser(JSON.parse(storedUser));
+            const parsed: User = JSON.parse(storedUser);
+            // Verify active status
+            const allUsers = getStoredUsers();
+            const current = allUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === parsed.email.toLowerCase());
+            if (current && current.is_active === 0) {
+              // User has been deactivated! Logout immediately.
+              localStorage.removeItem('csc_token');
+              localStorage.removeItem('csc_local_user');
+              setToken(null);
+              setUser(null);
+            } else {
+              setUser(current || parsed);
+            }
           } else {
             localStorage.removeItem('csc_token');
             setToken(null);
@@ -70,15 +59,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           throw new Error('Session expired');
         })
         .then((data) => {
-          setUser(data);
-          localStorage.setItem('csc_local_user', JSON.stringify(data));
+          if (data && data.is_active === 0) {
+            localStorage.removeItem('csc_token');
+            localStorage.removeItem('csc_local_user');
+            setToken(null);
+            setUser(null);
+          } else {
+            setUser(data);
+            localStorage.setItem('csc_local_user', JSON.stringify(data));
+          }
         })
         .catch(() => {
-          // If backend fetch fails (e.g. GitHub Pages static host), restore local user session if present
+          // If backend fetch fails, restore local user session if present and active
           const storedUser = localStorage.getItem('csc_local_user');
           if (storedUser) {
             try {
-              setUser(JSON.parse(storedUser));
+              const parsed: User = JSON.parse(storedUser);
+              const allUsers = getStoredUsers();
+              const current = allUsers.find(u => u.id === parsed.id || u.email.toLowerCase() === parsed.email.toLowerCase());
+              if (current && current.is_active === 0) {
+                localStorage.removeItem('csc_token');
+                localStorage.removeItem('csc_local_user');
+                setToken(null);
+                setUser(null);
+              } else {
+                setUser(current || parsed);
+              }
               setLoading(false);
               return;
             } catch {}
@@ -94,43 +100,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [token]);
 
   const fallbackLogin = (email: string, pass: string) => {
-    const cleanEmail = email.toLowerCase().trim();
-    
-    // Check static default accounts
-    if (DEFAULT_STATIC_USERS[cleanEmail]) {
-      const match = DEFAULT_STATIC_USERS[cleanEmail];
-      if (match.pass === pass) {
-        const genToken = `local-token-${Date.now()}`;
-        localStorage.setItem('csc_token', genToken);
-        localStorage.setItem('csc_local_user', JSON.stringify(match.user));
-        setToken(genToken);
-        setUser(match.user);
-        return { success: true };
-      }
+    const res = authenticateStoredUser(email, pass);
+    if (res.success && res.user) {
+      const genToken = `local-token-${Date.now()}`;
+      localStorage.setItem('csc_token', genToken);
+      localStorage.setItem('csc_local_user', JSON.stringify(res.user));
+      setToken(genToken);
+      setUser(res.user);
+      return { success: true };
     }
-
-    // Check dynamically registered local users
-    const registered = getLocalRegisteredUsers();
-    const found = registered.find(u => u.email.toLowerCase() === cleanEmail);
-    if (found) {
-      if (found.pass === pass) {
-        const genToken = `local-token-${Date.now()}`;
-        localStorage.setItem('csc_token', genToken);
-        localStorage.setItem('csc_local_user', JSON.stringify(found.user));
-        setToken(genToken);
-        setUser(found.user);
-        return { success: true };
-      }
-    }
-
-    return { success: false, error: 'Invalid email or password.' };
+    return { success: false, error: res.error || 'Invalid email or password.' };
   };
 
   const fallbackRegister = (name: string, email: string, mobile: string, pass: string, address?: string) => {
     const cleanEmail = email.toLowerCase().trim();
-    const registered = getLocalRegisteredUsers();
+    const existingUsers = getStoredUsers();
 
-    if (DEFAULT_STATIC_USERS[cleanEmail] || registered.some(u => u.email.toLowerCase() === cleanEmail)) {
+    if (existingUsers.some(u => u.email.toLowerCase() === cleanEmail)) {
       return { success: false, error: 'An account with this email already exists.' };
     }
 
@@ -141,15 +127,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mobile,
       role: 'customer',
       address: address || '',
+      is_active: 1,
       created_at: new Date().toISOString()
     };
 
-    registered.push({ email: cleanEmail, pass, user: newUser });
-    try {
-      localStorage.setItem('csc_registered_users', JSON.stringify(registered));
-    } catch (e) {
-      console.warn('Failed to save user to localStorage:', e);
-    }
+    saveStoredUser(newUser, pass);
 
     const genToken = `local-token-${Date.now()}`;
     localStorage.setItem('csc_token', genToken);
@@ -178,12 +160,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(data.user);
           return { success: true };
         } else {
-          return { success: false, error: data.error || 'Invalid credentials' };
+          if (data.error && data.error.includes('deactivated')) {
+            return { success: false, error: data.error };
+          }
+          const fallbackRes = fallbackLogin(email, pass);
+          if (fallbackRes.success) {
+            return fallbackRes;
+          }
+          return { success: false, error: data.error || 'Invalid email or password.' };
         }
       }
       throw new Error('Backend API unavailable');
     } catch (err: any) {
-      console.warn('Backend login API unreachable, using static fallback authentication:', err);
       return fallbackLogin(email, pass);
     }
   };
