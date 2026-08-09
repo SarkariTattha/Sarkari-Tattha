@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { UserProfileModal } from '../components/UserProfileModal';
 import {
   FileText,
   Clock,
@@ -11,7 +12,9 @@ import {
   UploadCloud,
   X,
   Users,
-  Printer
+  Printer,
+  Shield,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Application, Expense } from '../types';
@@ -19,6 +22,7 @@ import { ReceiptModal } from '../components/ReceiptModal';
 
 export const StaffDashboard: React.FC = () => {
   const { user, token } = useAuth();
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [applications, setApplications] = useState<Application[]>([]);
   const [pendingApps, setPendingApps] = useState<Application[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -168,22 +172,47 @@ export const StaffDashboard: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       {/* Staff Header */}
-      <div className="bg-gradient-to-r from-emerald-700 to-teal-700 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
-        <div>
-          <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full">
-            Staff Operations Portal
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-bold mt-1">Operator: {user?.name}</h1>
-          <p className="text-xs text-slate-300">Process customer applications, record payments & log center expenses</p>
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl border border-emerald-900">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full border border-emerald-500/30">
+              🧑‍💻 CSC + CSP Staff Operations Portal
+            </span>
+            {user && (
+              <span className="px-2.5 py-0.5 bg-amber-500/30 text-amber-200 text-[11px] font-mono font-bold rounded-md border border-amber-400/30">
+                User ID: #{user.id}
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
+            Operator: {user?.name || 'Staff Operator'}
+          </h1>
+          <p className="text-xs text-slate-300 flex items-center space-x-3">
+            <span>Role: <strong className="text-emerald-300 font-semibold">{user?.role.toUpperCase()} OPERATOR</strong></span>
+            <span>•</span>
+            <span>Mobile: <strong className="text-slate-200 font-mono">{user?.mobile || '9876543211'}</strong></span>
+            <span>•</span>
+            <span>Email: <strong className="text-slate-200">{user?.email}</strong></span>
+          </p>
         </div>
 
-        <button
-          onClick={() => setExpenseModalOpen(true)}
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 shrink-0 shadow-md"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Log Center Expense</span>
-        </button>
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            onClick={() => setProfileModalOpen(true)}
+            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 border border-white/20 cursor-pointer"
+          >
+            <UserCheck className="w-4 h-4 text-emerald-300" />
+            <span>My Profile</span>
+          </button>
+
+          <button
+            onClick={() => setExpenseModalOpen(true)}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition flex items-center space-x-2 cursor-pointer shadow-md"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Log Center Expense</span>
+          </button>
+        </div>
       </div>
 
       {/* Applications Processing Queue */}
@@ -508,6 +537,9 @@ export const StaffDashboard: React.FC = () => {
 
       {/* Receipt Modal */}
       {receiptAppNo && <ReceiptModal appNo={receiptAppNo} onClose={() => setReceiptAppNo(null)} />}
+
+      {/* Staff Profile Modal */}
+      <UserProfileModal isOpen={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     </div>
   );
 };

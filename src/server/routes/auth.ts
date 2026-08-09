@@ -41,18 +41,22 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Login
+// Login (supports Mobile Number or Email or ID)
 router.post('/login', async (req: AuthRequest, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, email, mobile, password } = req.body;
+    const loginInput = (identifier || mobile || email || '').trim();
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
+    if (!loginInput || !password) {
+      return res.status(400).json({ error: 'Mobile number / ID and password are required.' });
     }
 
-    const users = await query('SELECT * FROM users WHERE email = ?', [email]);
+    const users = await query(
+      `SELECT * FROM users WHERE mobile = ? OR LOWER(email) = LOWER(?) OR LOWER(name) = LOWER(?) OR id = ?`,
+      [loginInput, loginInput, loginInput, loginInput]
+    );
     if (users.length === 0) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid Mobile Number/ID or password.' });
     }
 
     const user = users[0];
@@ -63,7 +67,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
 
     const match = bcrypt.compareSync(password, user.password_hash);
     if (!match) {
-      return res.status(401).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid Mobile Number/ID or password.' });
     }
 
     const userData = {
@@ -77,7 +81,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
 
     const token = jwt.sign(userData, JWT_SECRET, { expiresIn: '7d' });
 
-    await logAudit(user.name, user.role, 'User Login', `Logged in successfully: ${user.email}`);
+    await logAudit(user.name, user.role, 'User Login', `Logged in successfully: ${user.mobile || user.email}`);
 
     res.json({ token, user: userData });
   } catch (err: any) {
@@ -102,13 +106,25 @@ router.get('/me', authenticateToken, async (req: AuthRequest, res: Response) => 
 // Update Profile
 router.put('/profile', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, mobile, address } = req.body;
-    await run(
-      `UPDATE users SET name = ?, mobile = ?, address = ? WHERE id = ?`,
-      [name, mobile, address, req.user!.id]
-    );
-    res.json({ message: 'Profile updated successfully.' });
+    const { name, mobile, email, address, password } = req.body;
+    let sql = `UPDATE users SET name = ?, mobile = ?, email = ?, address = ?`;
+    const params: any[] = [name, mobile, email, address];
+
+    if (password && password.trim().length > 0) {
+      const hash = bcrypt.hashSync(password, 10);
+      sql += `, password_hash = ?`;
+      params.push(hash);
+    }
+
+    sql += ` WHERE id = ?`;
+    params.push(req.user!.id);
+
+    await run(sql, params);
+
+    const updated = await query('SELECT id, name, email, mobile, role, address, created_at FROM users WHERE id = ?', [req.user!.id]);
+    res.json({ message: 'Profile updated successfully.', user: updated[0] });
   } catch (err: any) {
+    console.error('Update profile error:', err);
     res.status(500).json({ error: 'Failed to update profile.' });
   }
 });

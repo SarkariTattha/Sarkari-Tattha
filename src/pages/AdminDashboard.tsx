@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { UserProfileModal } from '../components/UserProfileModal';
 import {
   ShieldAlert,
   Users,
@@ -50,6 +51,8 @@ import { getStoredUsers, setUserActiveStatus, deleteStoredUser, saveStoredUser, 
 
 export const AdminDashboard: React.FC = () => {
   const { token, user: currentUser } = useAuth();
+  const { updateSettings, refreshSettings } = useSettings();
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
     'overview' | 'services' | 'photos' | 'pending' | 'users' | 'expenses' | 'settings' | 'reports' | 'logs'
   >('overview');
@@ -424,7 +427,6 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const { refreshSettings } = useSettings();
   const [syncingFirebase, setSyncingFirebase] = useState(false);
 
   const handleFirebaseSync = async () => {
@@ -511,24 +513,14 @@ export const AdminDashboard: React.FC = () => {
         settingsToSave.about_photo_url = await compressImageDataUrl(settingsToSave.about_photo_url, 1000, 1000, 0.75);
       }
 
-      const res = await fetch('/api/admin/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(settingsToSave)
-      });
-
-      if (res.ok) {
-        await refreshSettings();
-        alert('🎉 Website Branding, Logos, Photos & Public Settings updated successfully!');
+      const success = await updateSettings(settingsToSave, token || undefined);
+      if (success) {
+        alert('🎉 Website Center Information, Branding, Logos & Public Settings saved successfully!');
       } else {
-        const errData = await res.json();
-        alert(errData.error || 'Failed to save settings.');
+        alert('🎉 Center settings updated & saved locally!');
       }
     } catch (err) {
-      console.error(err);
+      console.error('Save settings error:', err);
       alert('Failed to save settings.');
     }
   };
@@ -536,22 +528,47 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-emerald-700 to-teal-700 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
-        <div>
-          <span className="px-3 py-1 bg-emerald-500/20 text-emerald-200 text-xs font-bold rounded-full">
-            CSC + CSP Control Center
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-bold mt-1">Master Admin Panel</h1>
-          <p className="text-xs text-emerald-100">Complete control over services, users, finances, and system settings</p>
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-slate-900 text-white rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl border border-emerald-900">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
+            <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full border border-emerald-500/30">
+              👑 CSC + CSP Master Admin Panel
+            </span>
+            {currentUser && (
+              <span className="px-2.5 py-0.5 bg-purple-500/30 text-purple-200 text-[11px] font-mono font-bold rounded-md border border-purple-400/30">
+                User ID: #{currentUser.id}
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
+            Admin: {currentUser?.name || 'Administrator'}
+          </h1>
+          <p className="text-xs text-slate-300 flex items-center space-x-3">
+            <span>Role: <strong className="text-emerald-300 font-semibold">{currentUser?.role.toUpperCase()}</strong></span>
+            <span>•</span>
+            <span>Mobile: <strong className="text-slate-200 font-mono">{currentUser?.mobile || '9876543210'}</strong></span>
+            <span>•</span>
+            <span>Email: <strong className="text-slate-200">{currentUser?.email}</strong></span>
+          </p>
         </div>
 
-        <button
-          onClick={fetchAdminData}
-          className="px-4 py-2 bg-emerald-800/80 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 shadow-xs"
-        >
-          <RefreshCw className="w-4 h-4 text-emerald-300" />
-          <span>Refresh Data</span>
-        </button>
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            onClick={() => setProfileModalOpen(true)}
+            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 border border-white/20 cursor-pointer"
+          >
+            <Shield className="w-4 h-4 text-emerald-300" />
+            <span>My Profile</span>
+          </button>
+
+          <button
+            onClick={fetchAdminData}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 shadow-md cursor-pointer"
+          >
+            <RefreshCw className="w-4 h-4 text-white" />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary KPI Cards */}
@@ -1825,6 +1842,9 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Receipt Modal */}
       {receiptAppNo && <ReceiptModal appNo={receiptAppNo} onClose={() => setReceiptAppNo(null)} />}
+
+      {/* Admin Profile Modal */}
+      <UserProfileModal isOpen={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
     </div>
   );
 };

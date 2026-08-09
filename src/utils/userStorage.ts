@@ -242,16 +242,17 @@ export function deleteStoredUser(targetUser: User): void {
   localStorage.setItem('csc_user_overrides', JSON.stringify(overrides));
 }
 
-// Authenticate user in local storage
+// Authenticate user in local storage (supports Mobile Number or Email or User ID)
 export function authenticateStoredUser(
-  email: string,
+  identifier: string,
   pass: string
 ): { success: boolean; user?: User; error?: string } {
-  const cleanEmail = email.toLowerCase().trim();
+  const cleanInput = identifier.toLowerCase().trim();
+  const cleanDigits = identifier.replace(/\D/g, '');
   const { ids: deletedIds, emails: deletedEmails } = getDeletedUserKeys();
 
   // Check if deleted
-  if (deletedEmails.has(cleanEmail)) {
+  if (deletedEmails.has(cleanInput)) {
     return { success: false, error: 'User account has been deleted.' };
   }
 
@@ -261,30 +262,56 @@ export function authenticateStoredUser(
   let foundUser: User | null = null;
   let storedPass: string | null = null;
 
-  // 1. Check overrides
-  if (overrides[cleanEmail]) {
-    foundUser = overrides[cleanEmail].user;
-    storedPass = overrides[cleanEmail].pass || null;
+  // Search by email, mobile, or ID in overrides
+  for (const key of Object.keys(overrides)) {
+    const ov = overrides[key];
+    if (ov && ov.user) {
+      const u = ov.user;
+      if (
+        u.email.toLowerCase() === cleanInput ||
+        (u.mobile && u.mobile.replace(/\D/g, '') === cleanDigits && cleanDigits.length >= 6) ||
+        String(u.id) === cleanInput
+      ) {
+        foundUser = u;
+        storedPass = ov.pass || null;
+        break;
+      }
+    }
   }
 
-  // 2. Check registered users
+  // Search in registered users
   if (!foundUser) {
-    const reg = registered.find((r) => r.email.toLowerCase() === cleanEmail);
+    const reg = registered.find(
+      (r) =>
+        r.email.toLowerCase() === cleanInput ||
+        (r.user && r.user.mobile && r.user.mobile.replace(/\D/g, '') === cleanDigits && cleanDigits.length >= 6) ||
+        (r.user && String(r.user.id) === cleanInput)
+    );
     if (reg) {
       foundUser = reg.user;
       storedPass = reg.pass;
     }
   }
 
-  // 3. Check default static users
-  if (!foundUser && DEFAULT_STATIC_USERS[cleanEmail]) {
-    const staticObj = DEFAULT_STATIC_USERS[cleanEmail];
-    foundUser = staticObj.user;
-    storedPass = staticObj.pass;
+  // Search in default static users
+  if (!foundUser) {
+    for (const key of Object.keys(DEFAULT_STATIC_USERS)) {
+      const staticObj = DEFAULT_STATIC_USERS[key];
+      const u = staticObj.user;
+      if (
+        u.email.toLowerCase() === cleanInput ||
+        (u.mobile && u.mobile.replace(/\D/g, '') === cleanDigits && cleanDigits.length >= 6) ||
+        String(u.id) === cleanInput
+      ) {
+        foundUser = u;
+        storedPass = staticObj.pass;
+        break;
+      }
+    }
   }
 
   if (!foundUser || !storedPass) {
-    return { success: false, error: 'Invalid email or password.' };
+    return { success: false, error: 'Invalid Mobile Number / Log In ID or password.' };
   }
 
   if (deletedIds.has(foundUser.id)) {
@@ -293,7 +320,7 @@ export function authenticateStoredUser(
 
   // Check password
   if (storedPass !== pass) {
-    return { success: false, error: 'Invalid email or password.' };
+    return { success: false, error: 'Invalid Mobile Number / Log In ID or password.' };
   }
 
   // Check if deactivated

@@ -36,19 +36,37 @@ export const CenterGallerySection: React.FC<CenterGallerySectionProps> = ({
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  const canEdit = user?.role === 'admin' || user?.role === 'staff';
+
   const fetchPhotos = async () => {
     setLoading(true);
+    let localPhotos: CenterPhoto[] = [];
+    try {
+      const raw = localStorage.getItem('csc_center_photos');
+      if (raw) localPhotos = JSON.parse(raw);
+    } catch {}
+
     try {
       const res = await fetch('/api/center-photos');
       if (res.ok) {
         const data = await res.json();
-        setPhotos(Array.isArray(data) ? data : []);
+        if (Array.isArray(data) && data.length > 0) {
+          setPhotos(data);
+          localStorage.setItem('csc_center_photos', JSON.stringify(data));
+          setLoading(false);
+          return;
+        }
       }
     } catch (err) {
-      console.error('Failed to load center photos:', err);
-    } finally {
-      setLoading(false);
+      console.error('Failed to load center photos from API:', err);
     }
+
+    if (localPhotos.length > 0) {
+      setPhotos(localPhotos);
+    } else {
+      setPhotos([]);
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -56,11 +74,19 @@ export const CenterGallerySection: React.FC<CenterGallerySectionProps> = ({
   }, []);
 
   const handlePhotoUploaded = (newPhoto: CenterPhoto) => {
-    setPhotos((prev) => [newPhoto, ...prev]);
+    setPhotos((prev) => {
+      const updated = [newPhoto, ...prev];
+      localStorage.setItem('csc_center_photos', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const handleDeletePhoto = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canEdit) {
+      alert('Only Admin or Staff can remove center photos.');
+      return;
+    }
     if (!window.confirm('Are you sure you want to remove this photo from the gallery?')) return;
 
     try {
@@ -69,12 +95,23 @@ export const CenterGallerySection: React.FC<CenterGallerySectionProps> = ({
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
 
-      if (res.ok) {
-        setPhotos((prev) => prev.filter((p) => p.id !== id));
+      if (res.ok || res.status === 404) {
+        setPhotos((prev) => {
+          const updated = prev.filter((p) => p.id !== id);
+          localStorage.setItem('csc_center_photos', JSON.stringify(updated));
+          return updated;
+        });
         if (lightboxIndex !== null) setLightboxIndex(null);
       }
     } catch (err) {
       console.error('Failed to delete photo:', err);
+      // Fallback local deletion
+      setPhotos((prev) => {
+        const updated = prev.filter((p) => p.id !== id);
+        localStorage.setItem('csc_center_photos', JSON.stringify(updated));
+        return updated;
+      });
+      if (lightboxIndex !== null) setLightboxIndex(null);
     }
   };
 
@@ -106,7 +143,7 @@ export const CenterGallerySection: React.FC<CenterGallerySectionProps> = ({
           </p>
         </div>
 
-        {showUploadBtn && (
+        {showUploadBtn && canEdit && (
           <div className="shrink-0">
             <button
               onClick={() => setIsUploadModalOpen(true)}
@@ -150,7 +187,7 @@ export const CenterGallerySection: React.FC<CenterGallerySectionProps> = ({
           <p className="text-xs theme-card-muted max-w-md mx-auto">
             Be the first to upload photos of your center facilities, customer counters, or computer terminals.
           </p>
-          {showUploadBtn && (
+          {showUploadBtn && canEdit && (
             <button
               onClick={() => setIsUploadModalOpen(true)}
               className="px-5 py-2.5 theme-bg-primary text-white font-bold rounded-xl text-xs inline-flex items-center space-x-2"
@@ -194,11 +231,11 @@ export const CenterGallerySection: React.FC<CenterGallerySectionProps> = ({
                   </div>
                 </div>
 
-                {/* Delete button for admin/staff */}
-                {(user?.role === 'admin' || user?.role === 'staff' || !user) && (
+                {/* Delete button for admin/staff only */}
+                {canEdit && (
                   <button
                     onClick={(e) => handleDeletePhoto(photo.id, e)}
-                    className="absolute bottom-3 right-3 p-2 bg-red-600/90 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow-md transition opacity-0 group-hover:opacity-100"
+                    className="absolute bottom-3 right-3 p-2 bg-red-600/90 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow-md transition opacity-0 group-hover:opacity-100 cursor-pointer"
                     title="Delete photo"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

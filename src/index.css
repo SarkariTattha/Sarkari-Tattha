@@ -3,20 +3,40 @@
 @layer base {
   body {
     line-height: 1.5;
-    font-family: 'Inter', 'Open Sans', 'Roboto', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background-color: var(--app-bg, #f8fafc);
     color: var(--card-text, #0f172a);
     transition: background-color 0.25s ease, color 0.25s ease;
   }
   
   h1, h2, h3, h4, .font-display {
-    font-family: 'Inter', 'Open Sans', sans-serif;
-    letter-spacing: -0.025em;
+    font-family: 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
 
-/* Theme variables */
-:root, [data-theme="saffron"] {
+/* Primary Theme Variables (Deep Banking Blue + Green System) */
+:root {
+  --brand-primary: #0066B3;
+  --brand-primary-hover: #00508f;
+  --brand-primary-light: #f0f7ff;
+  --brand-primary-text: #0066B3;
+  --brand-secondary: #2E9B45;
+  --brand-secondary-hover: #237a36;
+  --brand-badge-bg: #e0f2fe;
+  --brand-badge-text: #0369a1;
+  --brand-border: #cbd5e1;
+  --app-bg: #f8fafc;
+  --card-bg: #ffffff;
+  --card-text: #0f172a;
+  --card-muted: #64748b;
+  --card-border: #e2e8f0;
+  --hero-bg: linear-gradient(135deg, #003e6d 0%, #0066B3 60%, #0f766e 100%);
+  --nav-bg: #ffffff;
+  --nav-text: #0f172a;
+}
+
+[data-theme="saffron"] {
   --brand-primary: #ea580c;
   --brand-primary-hover: #c2410c;
   --brand-primary-light: #fff7ed;
@@ -35,10 +55,10 @@
 }
 
 [data-theme="emerald"] {
-  --brand-primary: #059669;
-  --brand-primary-hover: #047857;
-  --brand-primary-light: #ecfdf5;
-  --brand-primary-text: #059669;
+  --brand-primary: #2E9B45;
+  --brand-primary-hover: #237a36;
+  --brand-primary-light: #f0fdf4;
+  --brand-primary-text: #2E9B45;
   --brand-badge-bg: #d1fae5;
   --brand-badge-text: #065f46;
   --brand-border: #a7f3d0;
@@ -53,10 +73,11 @@
 }
 
 [data-theme="indigo"] {
-  --brand-primary: #2563eb;
-  --brand-primary-hover: #1d4ed8;
-  --brand-primary-light: #eff6ff;
-  --brand-primary-text: #2563eb;
+  --brand-primary: #0066B3;
+  --brand-primary-hover: #00508f;
+  --brand-primary-light: #f0f7ff;
+  --brand-primary-text: #0066B3;
+  --brand-secondary: #2E9B45;
   --brand-badge-bg: #dbeafe;
   --brand-badge-text: #1e40af;
   --brand-border: #bfdbfe;
@@ -70,31 +91,13 @@
   --nav-text: #0f172a;
 }
 
-[data-theme="crimson"] {
-  --brand-primary: #e11d48;
-  --brand-primary-hover: #be123c;
-  --brand-primary-light: #fff1f2;
-  --brand-primary-text: #e11d48;
-  --brand-badge-bg: #ffe4e6;
-  --brand-badge-text: #9f1239;
-  --brand-border: #fecdd3;
-  --app-bg: #fff1f2;
-  --card-bg: #ffffff;
-  --card-text: #881337;
-  --card-muted: #9f1239;
-  --card-border: #fecdd3;
-  --hero-bg: linear-gradient(to bottom, rgba(254, 205, 211, 0.8), #fff1f2, #f8fafc);
-  --nav-bg: #ffffff;
-  --nav-text: #881337;
-}
-
 [data-theme="dark"] {
-  --brand-primary: #f97316;
-  --brand-primary-hover: #ea580c;
-  --brand-primary-light: #1e293b;
-  --brand-primary-text: #f97316;
+  --brand-primary: #38bdf8;
+  --brand-primary-hover: #0284c7;
+  --brand-primary-light: #0f172a;
+  --brand-primary-text: #38bdf8;
   --brand-badge-bg: #1e293b;
-  --brand-badge-text: #fdba74;
+  --brand-badge-text: #7dd3fc;
   --brand-border: #334155;
   --app-bg: #020617;
   --card-bg: #0f172a;
@@ -126,10 +129,21 @@
 .theme-nav-bg { background-color: var(--nav-bg) !important; }
 .theme-hero-bg { background: var(--hero-bg) !important; }
 
+/* Banking blue & green utility classes */
+.bg-banking-blue { background-color: #0066B3; }
+.hover\:bg-banking-blue-hover:hover { background-color: #00508f; }
+.text-banking-blue { color: #0066B3; }
+.border-banking-blue { border-color: #0066B3; }
+
+.bg-banking-green { background-color: #2E9B45; }
+.hover\:bg-banking-green-hover:hover { background-color: #237a36; }
+.text-banking-green { color: #2E9B45; }
+.border-banking-green { border-color: #2E9B45; }
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -137,10 +151,21 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--brand-border, #cbd5e1);
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--brand-primary, #94a3b8);
+  background: #0066B3;
 }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

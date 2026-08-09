@@ -49,8 +49,8 @@ router.get('/', async (req, res: Response) => {
   }
 });
 
-// POST /api/center-photos - Upload center photo (Accepts file upload OR JSON base64 data URL)
-router.post('/', upload.single('photo'), async (req: AuthRequest, res: Response) => {
+// POST /api/center-photos - Upload center photo (Admin & Staff only)
+router.post('/', authenticateToken, requireRole('admin', 'staff'), upload.single('photo'), async (req: AuthRequest, res: Response) => {
   try {
     let imageUrl = '';
     const { title, category, description, photo_url, image_data } = req.body;

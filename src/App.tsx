@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { SettingsProvider } from './context/SettingsContext';
+import { ToastProvider } from './context/ToastContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 
@@ -32,8 +33,9 @@ const ProtectedRoute = ({
 
   if (loading) {
     return (
-      <div className="py-20 text-center text-xs text-slate-500">
-        Authenticating session...
+      <div className="py-20 text-center text-xs text-slate-500 flex flex-col items-center justify-center space-y-2">
+        <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+        <span>Authenticating session...</span>
       </div>
     );
   }
@@ -55,7 +57,7 @@ export function AppContent() {
   const { theme } = useTheme();
 
   return (
-    <div className="min-h-screen flex flex-col font-sans transition-colors duration-300 selection:bg-orange-500 selection:text-white theme-app-bg theme-card-text">
+    <div className="min-h-screen flex flex-col font-sans transition-colors duration-300 selection:bg-[#0066B3] selection:text-white theme-app-bg theme-card-text">
       <Navbar />
       <main className="flex-1">
         <Routes>
@@ -110,10 +112,13 @@ export default function App() {
       <ThemeProvider>
         <SettingsProvider>
           <AuthProvider>
-            <AppContent />
+            <ToastProvider>
+              <AppContent />
+            </ToastProvider>
           </AuthProvider>
         </SettingsProvider>
       </ThemeProvider>
     </Router>
   );
 }
+

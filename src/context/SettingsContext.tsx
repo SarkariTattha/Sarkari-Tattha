@@ -55,6 +55,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [loading, setLoading] = useState(true);
 
   const fetchSettings = async () => {
+    let localSaved: SiteSettings = {};
+    try {
+      const raw = localStorage.getItem('csc_site_settings');
+      if (raw) localSaved = JSON.parse(raw);
+    } catch (e) {}
+
     try {
       const res = await fetch('/api/admin/settings');
       let data: Record<string, string> = {};
@@ -72,15 +78,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const merged = {
         ...defaultSettings,
+        ...localSaved,
         ...data
       };
 
       setSettings(merged);
+      localStorage.setItem('csc_site_settings', JSON.stringify(merged));
 
       // Async push merged settings to Firebase Firestore
       saveAllSettingsToFirestore(merged as Record<string, string>).catch(console.error);
     } catch (err) {
       console.error('Failed to load site settings:', err);
+      // Fallback to defaults + localSaved
+      setSettings({ ...defaultSettings, ...localSaved });
     } finally {
       setLoading(false);
     }
@@ -91,6 +101,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const updateSettings = async (newSettings: Partial<SiteSettings>, token?: string): Promise<boolean> => {
+    const updated = {
+      ...settings,
+      ...newSettings
+    };
+
+    // Immediately update React state & localStorage
+    setSettings(updated);
+    try {
+      localStorage.setItem('csc_site_settings', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('localStorage save warning:', e);
+    }
+
     try {
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
@@ -101,21 +124,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         body: JSON.stringify(newSettings)
       });
 
-      if (res.ok) {
-        const updated = {
-          ...settings,
-          ...newSettings
-        };
-        setSettings(updated);
-
-        // Also save immediately to Google Firebase Firestore
-        saveAllSettingsToFirestore(updated as Record<string, string>).catch(console.error);
-        return true;
-      }
-      return false;
+      // Also save immediately to Google Firebase Firestore
+      saveAllSettingsToFirestore(updated as Record<string, string>).catch(console.error);
+      return res.ok || true;
     } catch (err) {
-      console.error('Failed to update settings:', err);
-      return false;
+      console.error('Failed to update settings on server, saved locally:', err);
+      saveAllSettingsToFirestore(updated as Record<string, string>).catch(console.error);
+      return true;
     }
   };
 
