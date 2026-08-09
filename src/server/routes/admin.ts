@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { query, run, logAudit } from '../db';
+import { query, run, logAudit, logDiffAudit } from '../db';
 import { authenticateToken, requireRole, AuthRequest } from '../middleware';
 
 const router = Router();
@@ -377,6 +377,539 @@ router.post('/faqs', authenticateToken, requireRole('admin'), async (req: AuthRe
     res.json({ message: 'FAQ added.' });
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to add FAQ.' });
+  }
+});
+
+// ==========================================
+// PHASE 2: Extended Customer Profile & Duplicate Detection
+// ==========================================
+
+// Check duplicates by Mobile, Aadhaar, PAN
+router.post('/customers/check-duplicate', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { mobile, aadhaar_no, pan_no, exclude_customer_id } = req.body;
+    const matches: any[] = [];
+
+    // Check Mobile
+    if (mobile && String(mobile).trim().length >= 5) {
+      const cleanMobile = String(mobile).trim();
+      let sql = `SELECT id, name, mobile, role, aadhaar_no, pan_no FROM users WHERE mobile = ?`;
+      const params: any[] = [cleanMobile];
+      if (exclude_customer_id) {
+        sql += ` AND id != ?`;
+        params.push(exclude_customer_id);
+      }
+      const mobileUsers = await query(sql, params);
+      for (const u of mobileUsers) {
+        const appCount = await query(`SELECT COUNT(*) as count FROM applications WHERE customer_id = ? OR customer_mobile = ?`, [u.id, cleanMobile]);
+        matches.push({
+          matched_field: 'mobile',
+          matched_value: cleanMobile,
+          customer_id: u.id,
+          customer_name: u.name,
+          customer_mobile: u.mobile,
+          existing_applications_count: appCount[0]?.count || 0
+        });
+      }
+    }
+
+    // Check Aadhaar
+    if (aadhaar_no && String(aadhaar_no).trim().length >= 8) {
+      const cleanAadhaar = String(aadhaar_no).trim();
+      let sql = `SELECT id, name, mobile, aadhaar_no FROM users WHERE aadhaar_no = ?`;
+      const params: any[] = [cleanAadhaar];
+      if (exclude_customer_id) {
+        sql += ` AND id != ?`;
+        params.push(exclude_customer_id);
+      }
+      const aadhaarUsers = await query(sql, params);
+      for (const u of aadhaarUsers) {
+        if (!matches.some(m => m.customer_id === u.id && m.matched_field === 'aadhaar')) {
+          matches.push({
+            matched_field: 'aadhaar',
+            matched_value: cleanAadhaar,
+            customer_id: u.id,
+            customer_name: u.name,
+            customer_mobile: u.mobile
+          });
+        }
+      }
+    }
+
+    // Check PAN
+    if (pan_no && String(pan_no).trim().length >= 5) {
+      const cleanPan = String(pan_no).trim().toUpperCase();
+      let sql = `SELECT id, name, mobile, pan_no FROM users WHERE UPPER(pan_no) = ?`;
+      const params: any[] = [cleanPan];
+      if (exclude_customer_id) {
+        sql += ` AND id != ?`;
+        params.push(exclude_customer_id);
+      }
+      const panUsers = await query(sql, params);
+      for (const u of panUsers) {
+        if (!matches.some(m => m.customer_id === u.id && m.matched_field === 'pan')) {
+          matches.push({
+            matched_field: 'pan',
+            matched_value: cleanPan,
+            customer_id: u.id,
+            customer_name: u.name,
+            customer_mobile: u.mobile
+          });
+        }
+      }
+    }
+
+    res.json({
+      has_duplicates: matches.length > 0,
+      matches
+    });
+  } catch (err: any) {
+    console.error('Duplicate check error:', err);
+    res.status(500).json({ error: 'Failed to check duplicate customer records.' });
+  }
+});
+
+// Fetch extended customer profiles
+router.get('/customers', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { search } = req.query;
+    let sql = `SELECT id, name, email, mobile, role, address, is_active, created_at,
+                      aadhaar_no, pan_no, voter_id, ration_card, dob, emergency_contact,
+                      advance_balance, pending_dues
+               FROM users WHERE role = 'customer'`;
+    const params: any[] = [];
+
+    if (search) {
+      sql += ` AND (name LIKE ? OR mobile LIKE ? OR email LIKE ? OR aadhaar_no LIKE ? OR pan_no LIKE ?)`;
+      const term = `%${search}%`;
+      params.push(term, term, term, term, term);
+    }
+
+    sql += ` ORDER BY id DESC`;
+    const customers = await query(sql, params);
+    res.json(customers);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch customer profiles.' });
+  }
+});
+
+// Add / Update Extended Customer Profile
+router.post('/customers', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, email, mobile, password, address, aadhaar_no, pan_no, voter_id, ration_card, dob, emergency_contact, advance_balance } = req.body;
+
+    if (!name || !mobile) {
+      return res.status(400).json({ error: 'Customer Name and Mobile Number are required.' });
+    }
+
+    // Check mobile duplicate
+    const existing = await query(`SELECT id FROM users WHERE mobile = ?`, [mobile]);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'A user with this mobile number already exists.' });
+    }
+
+    const passHash = bcrypt.hashSync(password || 'cust1234', 10);
+    const now = new Date().toISOString();
+    const custEmail = email || `cust_${Date.now()}@csc.local`;
+
+    const result = await run(
+      `INSERT INTO users (name, email, mobile, password_hash, role, address, aadhaar_no, pan_no, voter_id, ration_card, dob, emergency_contact, advance_balance, is_active, created_at)
+       VALUES (?, ?, ?, ?, 'customer', ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      [name, custEmail, mobile, passHash, address || '', aadhaar_no || '', pan_no || '', voter_id || '', ration_card || '', dob || '', emergency_contact || '', Number(advance_balance || 0), now]
+    );
+
+    await logDiffAudit('CUSTOMER', result.lastInsertRowid, name, 'ACCOUNT_CREATED', '', 'Customer Profile Created', req.user!.name, req.user!.role, 'CREATE');
+
+    res.json({ message: 'Customer created successfully.', customer_id: result.lastInsertRowid });
+  } catch (err: any) {
+    console.error('Customer create error:', err);
+    res.status(500).json({ error: 'Failed to create customer profile.' });
+  }
+});
+
+router.put('/customers/:id', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const custId = req.params.id;
+    const { name, email, mobile, address, aadhaar_no, pan_no, voter_id, ration_card, dob, emergency_contact, advance_balance } = req.body;
+
+    const oldCustRes = await query(`SELECT * FROM users WHERE id = ?`, [custId]);
+    if (oldCustRes.length === 0) {
+      return res.status(404).json({ error: 'Customer not found.' });
+    }
+    const oldCust = oldCustRes[0];
+
+    // Log diffs
+    const fieldsToTrack = [
+      { key: 'name', val: name },
+      { key: 'email', val: email },
+      { key: 'mobile', val: mobile },
+      { key: 'address', val: address },
+      { key: 'aadhaar_no', val: aadhaar_no },
+      { key: 'pan_no', val: pan_no },
+      { key: 'voter_id', val: voter_id },
+      { key: 'ration_card', val: ration_card },
+      { key: 'dob', val: dob },
+      { key: 'emergency_contact', val: emergency_contact },
+      { key: 'advance_balance', val: advance_balance }
+    ];
+
+    for (const f of fieldsToTrack) {
+      if (f.val !== undefined && String(oldCust[f.key] || '') !== String(f.val || '')) {
+        await logDiffAudit('CUSTOMER', Number(custId), oldCust.name, f.key, oldCust[f.key] || '', f.val || '', req.user!.name, req.user!.role, 'UPDATE');
+      }
+    }
+
+    await run(
+      `UPDATE users SET name = ?, email = ?, mobile = ?, address = ?, aadhaar_no = ?, pan_no = ?, voter_id = ?, ration_card = ?, dob = ?, emergency_contact = ?, advance_balance = ?
+       WHERE id = ?`,
+      [name, email, mobile, address || '', aadhaar_no || '', pan_no || '', voter_id || '', ration_card || '', dob || '', emergency_contact || '', Number(advance_balance || 0), custId]
+    );
+
+    res.json({ message: 'Customer profile updated successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update customer profile.' });
+  }
+});
+
+// Add advance balance deposit to customer profile
+router.post('/customers/:id/add-advance', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const custId = req.params.id;
+    const { amount, payment_method, notes } = req.body;
+
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({ error: 'A valid positive amount is required.' });
+    }
+
+    const custs = await query(`SELECT * FROM users WHERE id = ?`, [custId]);
+    if (custs.length === 0) {
+      return res.status(404).json({ error: 'Customer not found.' });
+    }
+
+    const cust = custs[0];
+    const oldBal = Number(cust.advance_balance || 0);
+    const newBal = oldBal + Number(amount);
+
+    await run(`UPDATE users SET advance_balance = ? WHERE id = ?`, [newBal, custId]);
+
+    await logDiffAudit('CUSTOMER', Number(custId), cust.name, 'advance_balance', oldBal, newBal, req.user!.name, req.user!.role, 'ADVANCE_DEPOSIT');
+
+    await logAudit(req.user!.name, req.user!.role, 'Customer Advance Deposited', `Added ₹${amount} (${payment_method || 'Cash'}) advance balance for ${cust.name}. New Bal: ₹${newBal}`);
+
+    res.json({ message: `Successfully added ₹${amount} to advance balance.`, new_balance: newBal });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to add advance balance.' });
+  }
+});
+
+// ==========================================
+// PHASE 4: Granular Staff Permissions
+// ==========================================
+
+// Get list of staff users with permissions
+router.get('/staff', authenticateToken, requireRole('admin', 'super_admin'), async (req: AuthRequest, res: Response) => {
+  try {
+    const staffList = await query(`SELECT id, name, email, mobile, role, is_active, created_at, permissions FROM users WHERE role IN ('staff', 'admin')`);
+    const formatted = staffList.map((s: any) => {
+      let perms = {
+        can_approve_apps: true,
+        can_edit_apps: true,
+        can_delete_apps: s.role === 'admin' || s.role === 'super_admin',
+        can_issue_receipts: true,
+        can_manage_expenses: true,
+        can_view_reports: true,
+        can_manage_cash: true,
+        can_manage_customers: true,
+        can_manage_services: s.role === 'admin' || s.role === 'super_admin'
+      };
+      if (s.permissions) {
+        try {
+          perms = { ...perms, ...JSON.parse(s.permissions) };
+        } catch (e) {}
+      }
+      return { ...s, permissions: perms };
+    });
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch staff list.' });
+  }
+});
+
+// Update staff permissions
+router.put('/staff/:id/permissions', authenticateToken, requireRole('admin', 'super_admin'), async (req: AuthRequest, res: Response) => {
+  try {
+    const staffId = req.params.id;
+    const { permissions } = req.body;
+
+    const staffRes = await query(`SELECT * FROM users WHERE id = ?`, [staffId]);
+    if (staffRes.length === 0) {
+      return res.status(404).json({ error: 'Staff member not found.' });
+    }
+    const staffUser = staffRes[0];
+
+    const oldPerms = staffUser.permissions || '';
+    const newPermsStr = JSON.stringify(permissions);
+
+    await run(`UPDATE users SET permissions = ? WHERE id = ?`, [newPermsStr, staffId]);
+
+    await logDiffAudit('STAFF_PERMISSIONS', Number(staffId), staffUser.name, 'permissions', oldPerms, newPermsStr, req.user!.name, req.user!.role, 'PERMISSION_CHANGE');
+
+    res.json({ message: 'Staff permissions updated successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update staff permissions.' });
+  }
+});
+
+// ==========================================
+// PHASE 5: Daily Cash Management
+// ==========================================
+
+// Get Today's Cash Register State
+router.get('/cash-register/today', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get today's cash collections from payments
+    const cashCollRes = await query(`SELECT SUM(paid_amount) as total FROM payments WHERE payment_date LIKE ? AND payment_method = 'Cash'`, [`${today}%`]);
+    const cashCollections = cashCollRes[0]?.total || 0;
+
+    // Get today's cash expenses
+    const cashExpRes = await query(`SELECT SUM(amount) as total FROM expenses WHERE date = ? AND payment_method = 'Cash'`, [today]);
+    const cashExpenses = cashExpRes[0]?.total || 0;
+
+    // Fetch register row for today
+    const regRes = await query(`SELECT * FROM daily_cash_register WHERE date = ?`, [today]);
+
+    let openingCash = 0;
+    if (regRes.length === 0) {
+      // Find previous day's closing cash
+      const prevRes = await query(`SELECT physical_cash, expected_closing FROM daily_cash_register WHERE date < ? ORDER BY date DESC LIMIT 1`, [today]);
+      if (prevRes.length > 0) {
+        openingCash = Number(prevRes[0].physical_cash || prevRes[0].expected_closing || 0);
+      }
+    } else {
+      openingCash = Number(regRes[0].opening_cash || 0);
+    }
+
+    const expectedClosing = openingCash + Number(cashCollections) - Number(cashExpenses);
+
+    if (regRes.length === 0) {
+      res.json({
+        date: today,
+        opening_cash: openingCash,
+        cash_collections: cashCollections,
+        cash_expenses: cashExpenses,
+        expected_closing: expectedClosing,
+        physical_cash: expectedClosing,
+        variance: 0,
+        notes: '',
+        status: 'OPEN'
+      });
+    } else {
+      const reg = regRes[0];
+      res.json({
+        ...reg,
+        cash_collections: cashCollections,
+        cash_expenses: cashExpenses,
+        expected_closing: expectedClosing,
+        variance: Number(reg.physical_cash || expectedClosing) - expectedClosing
+      });
+    }
+  } catch (err: any) {
+    console.error('Cash register error:', err);
+    res.status(500).json({ error: 'Failed to fetch cash register data.' });
+  }
+});
+
+// Set Opening Cash for Today
+router.post('/cash-register/open', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { opening_cash } = req.body;
+    const now = new Date().toISOString();
+
+    const openAmt = Number(opening_cash || 0);
+
+    const existing = await query(`SELECT * FROM daily_cash_register WHERE date = ?`, [today]);
+    if (existing.length === 0) {
+      await run(
+        `INSERT INTO daily_cash_register (date, opening_cash, cash_collections, cash_expenses, expected_closing, physical_cash, variance, status, opened_by, created_at, updated_at)
+         VALUES (?, ?, 0, 0, ?, ?, 0, 'OPEN', ?, ?, ?)`,
+        [today, openAmt, openAmt, openAmt, req.user!.name, now, now]
+      );
+    } else {
+      await run(
+        `UPDATE daily_cash_register SET opening_cash = ?, opened_by = ?, updated_at = ? WHERE date = ?`,
+        [openAmt, req.user!.name, now, today]
+      );
+    }
+
+    await logAudit(req.user!.name, req.user!.role, 'Daily Cash Register Opened', `Set opening cash to ₹${openAmt} for date ${today}`);
+
+    res.json({ message: 'Opening cash saved.' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update opening cash.' });
+  }
+});
+
+// Reconcile and Lock Cash Register for Today
+router.post('/cash-register/reconcile', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { physical_cash, notes, lock } = req.body;
+    const now = new Date().toISOString();
+
+    const physAmt = Number(physical_cash || 0);
+
+    // Calculate current expected
+    const cashCollRes = await query(`SELECT SUM(paid_amount) as total FROM payments WHERE payment_date LIKE ? AND payment_method = 'Cash'`, [`${today}%`]);
+    const cashCollections = cashCollRes[0]?.total || 0;
+    const cashExpRes = await query(`SELECT SUM(amount) as total FROM expenses WHERE date = ? AND payment_method = 'Cash'`, [today]);
+    const cashExpenses = cashExpRes[0]?.total || 0;
+
+    const existing = await query(`SELECT * FROM daily_cash_register WHERE date = ?`, [today]);
+    let openingCash = 0;
+    if (existing.length > 0) openingCash = Number(existing[0].opening_cash || 0);
+
+    const expectedClosing = openingCash + Number(cashCollections) - Number(cashExpenses);
+    const variance = physAmt - expectedClosing;
+    const status = lock ? 'LOCKED' : 'RECONCILED';
+
+    if (existing.length === 0) {
+      await run(
+        `INSERT INTO daily_cash_register (date, opening_cash, cash_collections, cash_expenses, expected_closing, physical_cash, variance, notes, status, opened_by, closed_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [today, openingCash, cashCollections, cashExpenses, expectedClosing, physAmt, variance, notes || '', status, req.user!.name, req.user!.name, now, now]
+      );
+    } else {
+      await run(
+        `UPDATE daily_cash_register SET cash_collections = ?, cash_expenses = ?, expected_closing = ?, physical_cash = ?, variance = ?, notes = ?, status = ?, closed_by = ?, updated_at = ? WHERE date = ?`,
+        [cashCollections, cashExpenses, expectedClosing, physAmt, variance, notes || '', status, req.user!.name, now, today]
+      );
+    }
+
+    await logAudit(req.user!.name, req.user!.role, 'Daily Cash Reconciled', `Date: ${today}, Physical: ₹${physAmt}, Expected: ₹${expectedClosing}, Variance: ₹${variance}, Status: ${status}`);
+
+    res.json({ message: `Cash register successfully ${status === 'LOCKED' ? 'locked' : 'reconciled'}.`, variance });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to reconcile cash register.' });
+  }
+});
+
+// Cash Register History
+router.get('/cash-register/history', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const history = await query(`SELECT * FROM daily_cash_register ORDER BY date DESC LIMIT 30`);
+    res.json(history);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch cash register history.' });
+  }
+});
+
+// ==========================================
+// PHASE 6: Audit Diff Logs & Comprehensive Reports
+// ==========================================
+
+// Audit Diff Logs Endpoint
+router.get('/audit-diff-logs', authenticateToken, requireRole('admin', 'super_admin'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { entity_type, limit } = req.query;
+    let sql = `SELECT * FROM audit_diff_logs WHERE 1=1`;
+    const params: any[] = [];
+
+    if (entity_type) {
+      sql += ` AND entity_type = ?`;
+      params.push(entity_type);
+    }
+
+    sql += ` ORDER BY id DESC LIMIT ` + (Number(limit) || 100);
+    const logs = await query(sql, params);
+    res.json(logs);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch audit diff logs.' });
+  }
+});
+
+// Service Profitability Report
+router.get('/reports/service-profitability', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const services = await query(`SELECT * FROM services ORDER BY title ASC`);
+    const appStats = await query(`
+      SELECT service_name, COUNT(*) as app_count, SUM(total_amount) as gross_revenue, SUM(paid_amount) as total_collected
+      FROM applications
+      GROUP BY service_name
+    `);
+
+    const statsMap = new Map();
+    appStats.forEach((s: any) => {
+      statsMap.set(s.service_name, s);
+    });
+
+    const report = services.map((srv: any) => {
+      const stat = statsMap.get(srv.title) || { app_count: 0, gross_revenue: 0, total_collected: 0 };
+      const centerFee = srv.service_charge || 0;
+      const govtFee = srv.govt_fee || 0;
+      const estMarginPerApp = centerFee;
+      const totalMargin = stat.app_count * estMarginPerApp;
+
+      return {
+        service_id: srv.id,
+        title: srv.title,
+        category: srv.category,
+        service_charge: centerFee,
+        govt_fee: govtFee,
+        total_price: centerFee + govtFee,
+        application_count: stat.app_count,
+        gross_revenue: stat.gross_revenue,
+        total_collected: stat.total_collected,
+        estimated_center_margin: totalMargin
+      };
+    });
+
+    res.json(report);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to generate service profitability report.' });
+  }
+});
+
+// Pending Dues Customer Report
+router.get('/reports/pending-dues', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const pendingApps = await query(`
+      SELECT a.*, u.advance_balance
+      FROM applications a
+      LEFT JOIN users u ON a.customer_id = u.id
+      WHERE a.pending_amount > 0
+      ORDER BY a.pending_amount DESC
+    `);
+    res.json(pendingApps);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch pending dues report.' });
+  }
+});
+
+// Customer Ledger Report
+router.get('/reports/customer-ledger/:id', authenticateToken, requireRole('admin', 'staff'), async (req: AuthRequest, res: Response) => {
+  try {
+    const custId = req.params.id;
+    const custs = await query(`SELECT * FROM users WHERE id = ?`, [custId]);
+    if (custs.length === 0) {
+      return res.status(404).json({ error: 'Customer not found.' });
+    }
+    const customer = custs[0];
+
+    const apps = await query(`SELECT * FROM applications WHERE customer_id = ? OR customer_mobile = ? ORDER BY id DESC`, [custId, customer.mobile]);
+    const payments = await query(`SELECT * FROM payments WHERE customer_mobile = ? ORDER BY id DESC`, [customer.mobile]);
+    const diffLogs = await query(`SELECT * FROM audit_diff_logs WHERE entity_type = 'CUSTOMER' AND entity_id = ? ORDER BY id DESC`, [custId]);
+
+    res.json({
+      customer,
+      applications: apps,
+      payments,
+      audit_trail: diffLogs
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch customer ledger.' });
   }
 });
 

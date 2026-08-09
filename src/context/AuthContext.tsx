@@ -9,7 +9,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, mobile: string, pass: string, address?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  demoLogin: (role: 'admin' | 'staff' | 'customer') => Promise<void>;
+  demoLogin: (role: 'super_admin' | 'admin' | 'staff' | 'customer') => Promise<void>;
   updateUser: (user: User) => void;
 }
 
@@ -211,8 +211,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const demoLogin = async (role: 'admin' | 'staff' | 'customer') => {
+  const demoLogin = async (role: 'super_admin' | 'admin' | 'staff' | 'customer') => {
     const creds = {
+      super_admin: { email: 'superadmin@csc.com', pass: 'superadmin123' },
       admin: { email: 'admin@csc.com', pass: 'admin123' },
       staff: { email: 'staff@csc.com', pass: 'staff123' },
       customer: { email: 'customer@csc.com', pass: 'customer123' }

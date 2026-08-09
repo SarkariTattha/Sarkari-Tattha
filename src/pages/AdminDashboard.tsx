@@ -37,15 +37,24 @@ import {
   Mail,
   MapPin,
   Sparkles,
-  Database
+  Database,
+  Calendar,
+  Landmark,
+  ShieldCheck,
+  History
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { syncLocalDbToFirestore } from '../lib/firebaseStore';
 import { compressImageFile, compressImageDataUrl } from '../lib/imageCompressor';
-import { Service, Application, User, Expense } from '../types';
+import { Service, Application, User, UserRole, Expense, DailyCashRegister, StaffPermissions } from '../types';
 import { ReceiptModal } from '../components/ReceiptModal';
 import { CenterGallerySection } from '../components/CenterGallerySection';
+import { ExtendedCustomerModal } from '../components/ExtendedCustomerModal';
+import { StaffPermissionsModal } from '../components/StaffPermissionsModal';
+import { DailyCashRegisterModal } from '../components/DailyCashRegisterModal';
+import { ReportsAndDiffLogsSection } from '../components/ReportsAndDiffLogsSection';
+import { DuplicateCheckModal } from '../components/DuplicateCheckModal';
 import { getStoredServices, saveStoredServices } from '../data/defaultServices';
 import { getStoredUsers, setUserActiveStatus, deleteStoredUser, saveStoredUser, processFetchedUsers } from '../utils/userStorage';
 
@@ -54,7 +63,7 @@ export const AdminDashboard: React.FC = () => {
   const { updateSettings, refreshSettings } = useSettings();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'services' | 'photos' | 'pending' | 'users' | 'expenses' | 'settings' | 'reports' | 'logs'
+    'overview' | 'services' | 'photos' | 'pending' | 'users' | 'expenses' | 'settings' | 'reports' | 'logs' | 'appointments'
   >('overview');
 
   const [stats, setStats] = useState<any>(null);
@@ -65,6 +74,9 @@ export const AdminDashboard: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [centerSettings, setCenterSettings] = useState<any>({});
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [apptSearchTerm, setApptSearchTerm] = useState('');
+  const [apptStatusFilter, setApptStatusFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
 
   // Modals state
@@ -84,7 +96,7 @@ export const AdminDashboard: React.FC = () => {
   const [usrEmail, setUsrEmail] = useState('');
   const [usrMobile, setUsrMobile] = useState('');
   const [usrPassword, setUsrPassword] = useState('');
-  const [usrRole, setUsrRole] = useState<'admin' | 'staff' | 'customer'>('staff');
+  const [usrRole, setUsrRole] = useState<UserRole>('staff');
 
   // Edit User modal state
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -93,14 +105,152 @@ export const AdminDashboard: React.FC = () => {
   const [editUsrEmail, setEditUsrEmail] = useState('');
   const [editUsrMobile, setEditUsrMobile] = useState('');
   const [editUsrAddress, setEditUsrAddress] = useState('');
-  const [editUsrRole, setEditUsrRole] = useState<'admin' | 'staff' | 'customer'>('staff');
+  const [editUsrRole, setEditUsrRole] = useState<UserRole>('staff');
   const [editUsrActive, setEditUsrActive] = useState<boolean>(true);
   const [editUsrPassword, setEditUsrPassword] = useState('');
 
-  const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | 'admin' | 'staff' | 'customer'>('ALL');
+  const [userRoleFilter, setUserRoleFilter] = useState<'ALL' | UserRole>('ALL');
   const [userSearchQuery, setUserSearchQuery] = useState('');
 
   const [receiptAppNo, setReceiptAppNo] = useState<string | null>(null);
+
+  // Cash Register State
+  const [cashRegisterModalOpen, setCashRegisterModalOpen] = useState(false);
+  const [cashRegisterData, setCashRegisterData] = useState<DailyCashRegister | null>(null);
+
+  // Extended Customer Profile State
+  const [customerModalOpen, setCustomerModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<User | null>(null);
+
+  // Staff Permissions State
+  const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
+  const [permissionStaffUser, setPermissionStaffUser] = useState<User | null>(null);
+
+  // Duplicate Check Modal State
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<any[]>([]);
+
+  const fetchCashRegisterToday = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/cash-register/today', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCashRegisterData(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleOpenCashRegister = async (openingCash: number) => {
+    const res = await fetch('/api/admin/cash-register/open', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ opening_cash: openingCash })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to set opening cash');
+    }
+    await fetchCashRegisterToday();
+  };
+
+  const handleReconcileCashRegister = async (physicalCash: number, notes: string, lock: boolean) => {
+    const res = await fetch('/api/admin/cash-register/reconcile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ physical_cash: physicalCash, notes, lock })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to reconcile cash register');
+    }
+    await fetchCashRegisterToday();
+  };
+
+  const handleSaveCustomerProfile = async (custData: any) => {
+    const isEdit = Boolean(custData.id);
+    const url = isEdit ? `/api/admin/customers/${custData.id}` : '/api/admin/customers';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(custData)
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to save customer profile');
+    }
+    fetchAdminData();
+  };
+
+  const handleAddCustomerAdvance = async (customerId: number, amount: number, method: string, notes: string) => {
+    const res = await fetch(`/api/admin/customers/${customerId}/add-advance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ amount, payment_method: method, notes })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to deposit advance balance');
+    }
+    fetchAdminData();
+  };
+
+  const handleSaveStaffPermissions = async (staffId: number, permissions: StaffPermissions) => {
+    const res = await fetch(`/api/admin/staff/${staffId}/permissions`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ permissions })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update permissions');
+    }
+    fetchAdminData();
+  };
+
+  const handleCheckCustomerDuplicate = async (data: { mobile?: string; aadhaar_no?: string; pan_no?: string }) => {
+    try {
+      const res = await fetch('/api/admin/customers/check-duplicate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.matches || [];
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    return [];
+  };
 
   const safeFetchJson = async (url: string, options?: RequestInit) => {
     try {
@@ -128,9 +278,10 @@ export const AdminDashboard: React.FC = () => {
       safeFetchJson('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } }),
       safeFetchJson('/api/expenses', { headers: { Authorization: `Bearer ${token}` } }),
       safeFetchJson('/api/admin/settings'),
-      safeFetchJson('/api/admin/logs', { headers: { Authorization: `Bearer ${token}` } })
+      safeFetchJson('/api/admin/logs', { headers: { Authorization: `Bearer ${token}` } }),
+      safeFetchJson('/api/appointments', { headers: { Authorization: `Bearer ${token}` } })
     ])
-      .then(([st, sv, ap, pd, us, ex, set, lg]) => {
+      .then(([st, sv, ap, pd, us, ex, set, lg, apt]) => {
         setStats(st || {});
         setServices(Array.isArray(sv) && sv.length > 0 ? sv : getStoredServices());
         setApplications(Array.isArray(ap) ? ap : []);
@@ -139,6 +290,24 @@ export const AdminDashboard: React.FC = () => {
         setExpenses(Array.isArray(ex) ? ex : []);
         setCenterSettings(set || {});
         setLogs(Array.isArray(lg) ? lg : []);
+
+        // Merge API appointments with local appointments backup
+        let localAppts: any[] = [];
+        try {
+          const raw = localStorage.getItem('csc_local_appointments');
+          if (raw) localAppts = JSON.parse(raw);
+        } catch (e) {
+          console.error('Error reading local appointments:', e);
+        }
+
+        const apiAppts = Array.isArray(apt) ? apt : [];
+        const apptMap = new Map<string | number, any>();
+        apiAppts.forEach((a) => apptMap.set(a.id, a));
+        localAppts.forEach((a) => {
+          if (!apptMap.has(a.id)) apptMap.set(a.id, a);
+        });
+
+        setAppointments(Array.from(apptMap.values()));
       })
       .catch((err) => {
         console.error('Fetch admin data catch block:', err);
@@ -146,6 +315,36 @@ export const AdminDashboard: React.FC = () => {
         setUsers(getStoredUsers());
       })
       .finally(() => setLoading(false));
+  };
+
+  const handleUpdateAppointmentStatus = async (id: number | string, newStatus: string) => {
+    try {
+      await fetch(`/api/appointments/${id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+    } catch (e) {
+      console.error('API update appointment status error:', e);
+    }
+
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
+    );
+
+    try {
+      const raw = localStorage.getItem('csc_local_appointments');
+      if (raw) {
+        const list = JSON.parse(raw);
+        const updated = list.map((a: any) => (a.id === id ? { ...a, status: newStatus } : a));
+        localStorage.setItem('csc_local_appointments', JSON.stringify(updated));
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   useEffect(() => {
@@ -552,10 +751,32 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              fetchCashRegisterToday();
+              setCashRegisterModalOpen(true);
+            }}
+            className="px-3.5 py-2.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 font-bold rounded-xl text-xs transition flex items-center space-x-1.5 border border-emerald-500/40 cursor-pointer"
+          >
+            <Landmark className="w-4 h-4 text-emerald-300" />
+            <span>Daily Cash Register</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setEditingCustomer(null);
+              setCustomerModalOpen(true);
+            }}
+            className="px-3.5 py-2.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 font-bold rounded-xl text-xs transition flex items-center space-x-1.5 border border-blue-500/40 cursor-pointer"
+          >
+            <Users className="w-4 h-4 text-blue-300" />
+            <span>+ Extended Customer</span>
+          </button>
+
           <button
             onClick={() => setProfileModalOpen(true)}
-            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 border border-white/20 cursor-pointer"
+            className="px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 border border-white/20 cursor-pointer"
           >
             <Shield className="w-4 h-4 text-emerald-300" />
             <span>My Profile</span>
@@ -563,7 +784,7 @@ export const AdminDashboard: React.FC = () => {
 
           <button
             onClick={fetchAdminData}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 shadow-md cursor-pointer"
+            className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition flex items-center space-x-1.5 shadow-md cursor-pointer"
           >
             <RefreshCw className="w-4 h-4 text-white" />
             <span>Refresh</span>
@@ -612,6 +833,7 @@ export const AdminDashboard: React.FC = () => {
           { id: 'expenses', label: 'Expenses' },
           { id: 'reports', label: 'Reports & Export' },
           { id: 'settings', label: 'Center Settings' },
+          { id: 'appointments', label: `Center Visits (${appointments.length})` },
           { id: 'logs', label: 'Audit Logs' }
         ].map((tab) => (
           <button
@@ -943,6 +1165,20 @@ export const AdminDashboard: React.FC = () => {
                             {new Date(u.created_at).toLocaleDateString()}
                           </td>
                           <td className="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+                            {(u.role === 'staff' || u.role === 'admin') && (
+                              <button
+                                onClick={() => {
+                                  setPermissionStaffUser(u);
+                                  setPermissionsModalOpen(true);
+                                }}
+                                className="px-2.5 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 rounded-lg text-[11px] font-bold transition inline-flex items-center space-x-1 cursor-pointer"
+                                title="Configure granular permissions matrix"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Permissions</span>
+                              </button>
+                            )}
+
                             {/* Edit / Password Button */}
                             <button
                               onClick={() => handleOpenEditUser(u)}
@@ -1037,36 +1273,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Tab 6: Reports & Export */}
       {activeTab === 'reports' && (
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-6">
-          <h3 className="text-xl font-bold text-slate-900">Financial Reports & Summary</h3>
-
-          <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div>
-                <span className="text-slate-500 block">Total Gross Revenue:</span>
-                <strong className="text-emerald-700 text-lg">₹{stats?.total_revenue || 0}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Total Operating Expenses:</span>
-                <strong className="text-red-600 text-lg">₹{stats?.total_expenses || 0}</strong>
-              </div>
-              <div>
-                <span className="text-slate-500 block">Net Center Profit:</span>
-                <strong className="text-slate-900 text-lg">₹{stats?.net_profit || 0}</strong>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-slate-200 flex gap-3">
-              <button
-                onClick={() => window.print()}
-                className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-2 shadow-xs transition"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Official Summary Report</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReportsAndDiffLogsSection token={token || undefined} />
       )}
 
       {/* Tab 7: Center Settings */}
@@ -1504,6 +1711,152 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Tab 9: Appointments & Center Visits */}
+      {activeTab === 'appointments' && (
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h3 className="text-xl font-bold text-slate-900">Booked Physical Center Visits ({appointments.length})</h3>
+              <p className="text-xs text-slate-500">Manage customer visit appointments, confirm slots, and update visit status.</p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search Name / Mobile / ID..."
+                  value={apptSearchTerm}
+                  onChange={(e) => setApptSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                />
+              </div>
+
+              <select
+                value={apptStatusFilter}
+                onChange={(e) => setApptStatusFilter(e.target.value)}
+                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
+              >
+                <option value="ALL">All Visit Statuses</option>
+                <option value="Requested">Requested</option>
+                <option value="Approved">Approved</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="p-3">Visit ID</th>
+                  <th className="p-3">Customer Name & Contact</th>
+                  <th className="p-3">Service / Purpose</th>
+                  <th className="p-3">Preferred Date & Time Slot</th>
+                  <th className="p-3">Message / Notes</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3 text-right">Update Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
+                {appointments
+                  .filter((a) => {
+                    const matchSearch =
+                      !apptSearchTerm ||
+                      (a.customer_name && a.customer_name.toLowerCase().includes(apptSearchTerm.toLowerCase())) ||
+                      (a.mobile && a.mobile.includes(apptSearchTerm)) ||
+                      (a.service_title && a.service_title.toLowerCase().includes(apptSearchTerm.toLowerCase())) ||
+                      String(a.id).includes(apptSearchTerm);
+                    const matchStatus = apptStatusFilter === 'ALL' || a.status === apptStatusFilter;
+                    return matchSearch && matchStatus;
+                  })
+                  .map((a) => (
+                    <tr key={a.id} className="hover:bg-slate-50/80 transition">
+                      <td className="p-3 font-mono font-bold text-slate-900">
+                        #APPT-{a.id}
+                      </td>
+                      <td className="p-3">
+                        <p className="font-bold text-slate-900">{a.customer_name || 'Customer'}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">{a.mobile || 'No Mobile'}</p>
+                        {a.customer_id && (
+                          <span className="inline-block px-1.5 py-0.5 bg-slate-100 text-[9px] font-mono rounded font-bold text-slate-600 mt-0.5">
+                            User ID: #{a.customer_id}
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <p className="font-bold text-emerald-800">{a.service_title}</p>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center space-x-1 font-bold text-slate-800">
+                          <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>{a.appointment_date}</span>
+                        </div>
+                        <div className="flex items-center space-x-1 text-[10px] text-slate-500 mt-0.5">
+                          <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{a.time_slot}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 max-w-xs text-[11px] text-slate-600 truncate">
+                        {a.notes || <span className="italic text-slate-400">No notes provided</span>}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2.5 py-1 rounded-full font-bold text-[10px] ${
+                            a.status === 'Approved'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                              : a.status === 'Completed'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : a.status === 'Cancelled'
+                              ? 'bg-red-100 text-red-800 border border-red-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}
+                        >
+                          {a.status || 'Requested'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right space-x-1">
+                        {a.status !== 'Approved' && a.status !== 'Completed' && (
+                          <button
+                            onClick={() => handleUpdateAppointmentStatus(a.id, 'Approved')}
+                            className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold"
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {a.status !== 'Completed' && (
+                          <button
+                            onClick={() => handleUpdateAppointmentStatus(a.id, 'Completed')}
+                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold"
+                          >
+                            Complete
+                          </button>
+                        )}
+                        {a.status !== 'Cancelled' && (
+                          <button
+                            onClick={() => handleUpdateAppointmentStatus(a.id, 'Cancelled')}
+                            className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-bold"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                {appointments.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-400 text-xs italic">
+                      No center visit appointments booked yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Service Form */}
       {serviceModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1845,6 +2198,60 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Admin Profile Modal */}
       <UserProfileModal isOpen={profileModalOpen} onClose={() => setProfileModalOpen(false)} />
+
+      {/* Daily Cash Register Modal */}
+      <DailyCashRegisterModal
+        isOpen={cashRegisterModalOpen}
+        onClose={() => setCashRegisterModalOpen(false)}
+        registerData={cashRegisterData}
+        onOpenRegister={handleOpenCashRegister}
+        onReconcileRegister={handleReconcileCashRegister}
+      />
+
+      {/* Extended Customer Profile Modal */}
+      <ExtendedCustomerModal
+        isOpen={customerModalOpen}
+        onClose={() => setCustomerModalOpen(false)}
+        customer={editingCustomer}
+        onSave={handleSaveCustomerProfile}
+        onAddAdvance={handleAddCustomerAdvance}
+        onCheckDuplicate={handleCheckCustomerDuplicate}
+      />
+
+      {/* Staff Permissions Modal */}
+      <StaffPermissionsModal
+        isOpen={permissionsModalOpen}
+        onClose={() => {
+          setPermissionsModalOpen(false);
+          setPermissionStaffUser(null);
+        }}
+        staffUser={permissionStaffUser}
+        onSavePermissions={handleSaveStaffPermissions}
+      />
+
+      {/* Duplicate Check Modal */}
+      <DuplicateCheckModal
+        isOpen={duplicateModalOpen}
+        onClose={() => setDuplicateModalOpen(false)}
+        matches={duplicateMatches}
+        onSelectExisting={(match) => {
+          setDuplicateModalOpen(false);
+          const found = users.find((u) => u.id === match.customer_id || u.mobile === match.customer_mobile);
+          if (found) {
+            setEditingCustomer(found);
+          } else {
+            setEditingCustomer({
+              id: match.customer_id || 0,
+              name: match.customer_name,
+              email: '',
+              mobile: match.customer_mobile,
+              role: 'customer',
+              created_at: new Date().toISOString()
+            });
+          }
+          setCustomerModalOpen(true);
+        }}
+      />
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { query, run, logAudit } from '../db';
+import { query, run, logAudit, logDiffAudit } from '../db';
 import { authenticateToken, requireRole, AuthRequest } from '../middleware';
 
 const router = Router();
@@ -64,7 +64,34 @@ router.post('/', authenticateToken, requireRole('admin', 'staff'), async (req: A
     }
 
     const app = apps[0];
-    const newPaidAmount = Number(app.paid_amount) + Number(amount_paid);
+    const method = payment_method || 'Cash';
+
+    // Check if paying via Advance Balance
+    if (method === 'ADVANCE_BALANCE') {
+      if (!app.customer_id) {
+        return res.status(400).json({ error: 'Customer account required for Advance Balance deduction.' });
+      }
+      const custs = await query('SELECT * FROM users WHERE id = ?', [app.customer_id]);
+      if (custs.length === 0) {
+        return res.status(404).json({ error: 'Customer record not found.' });
+      }
+      const cust = custs[0];
+      const currentAdv = Number(cust.advance_balance || 0);
+      if (currentAdv < Number(amount_paid)) {
+        return res.status(400).json({
+          error: `Insufficient Advance Balance. Customer has ₹${currentAdv.toFixed(2)}, but ₹${Number(amount_paid).toFixed(2)} is required.`
+        });
+      }
+
+      // Deduct advance balance
+      const newAdv = currentAdv - Number(amount_paid);
+      await run('UPDATE users SET advance_balance = ? WHERE id = ?', [newAdv, cust.id]);
+      await logDiffAudit('CUSTOMER', cust.id, cust.name, 'advance_balance', currentAdv, newAdv, req.user!.name, req.user!.role, 'ADVANCE_DEDUCTION');
+    }
+
+    const oldPaid = Number(app.paid_amount || 0);
+    const oldPending = Number(app.pending_amount || 0);
+    const newPaidAmount = oldPaid + Number(amount_paid);
     const newPendingAmount = Math.max(0, Number(app.total_amount) - newPaidAmount);
     const now = new Date().toISOString();
     const txId = transaction_id || ('TXN' + Math.floor(10000000 + Math.random() * 90000000));
@@ -75,6 +102,17 @@ router.post('/', authenticateToken, requireRole('admin', 'staff'), async (req: A
       `UPDATE applications SET paid_amount = ?, pending_amount = ?, updated_at = ? WHERE id = ?`,
       [newPaidAmount, newPendingAmount, now, application_id]
     );
+
+    // Update customer pending_dues in users table if customer_id exists
+    if (app.customer_id) {
+      const custPendingRes = await query('SELECT SUM(pending_amount) as total FROM applications WHERE customer_id = ?', [app.customer_id]);
+      const totalCustPending = custPendingRes[0]?.total || 0;
+      await run('UPDATE users SET pending_dues = ? WHERE id = ?', [totalCustPending, app.customer_id]);
+    }
+
+    // Log diff audit for payment
+    await logDiffAudit('APPLICATION', app.id, app.application_no, 'paid_amount', oldPaid, newPaidAmount, staffName, req.user!.role, 'PAYMENT');
+    await logDiffAudit('APPLICATION', app.id, app.application_no, 'pending_amount', oldPending, newPendingAmount, staffName, req.user!.role, 'PAYMENT');
 
     // Record payment entry
     const payResult = await run(
@@ -90,7 +128,7 @@ router.post('/', authenticateToken, requireRole('admin', 'staff'), async (req: A
         app.total_amount,
         amount_paid,
         newPendingAmount,
-        payment_method || 'Cash',
+        method,
         txId,
         req.user!.id,
         staffName,
@@ -106,13 +144,13 @@ router.post('/', authenticateToken, requireRole('admin', 'staff'), async (req: A
       [
         app.customer_id,
         'Payment Received',
-        `Payment of ₹${amount_paid} received for ${app.application_no}. Remaining pending: ₹${newPendingAmount}.`,
+        `Payment of ₹${amount_paid} received (${method}) for ${app.application_no}. Remaining pending: ₹${newPendingAmount}.`,
         `/track?app_no=${app.application_no}&mobile=${app.customer_mobile}`,
         now
       ]
     );
 
-    await logAudit(staffName, req.user!.role, 'Payment Collected', `Collected ₹${amount_paid} for ${app.application_no}. Txn: ${txId}`);
+    await logAudit(staffName, req.user!.role, 'Payment Collected', `Collected ₹${amount_paid} (${method}) for ${app.application_no}. Txn: ${txId}`);
 
     res.json({
       success: true,

@@ -27,9 +27,10 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleDemo = async (role: 'admin' | 'staff' | 'customer') => {
+  const handleDemo = async (role: 'super_admin' | 'admin' | 'staff' | 'customer') => {
     await demoLogin(role);
-    if (role === 'admin') navigate('/admin');
+    if (role === 'super_admin') navigate('/super-admin');
+    else if (role === 'admin') navigate('/admin');
     else if (role === 'staff') navigate('/staff');
     else navigate('/customer');
   };
@@ -107,6 +108,17 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-2 text-[11px]">
+          <button
+            onClick={() => handleDemo('super_admin')}
+            className="p-2.5 bg-slate-800/80 hover:bg-emerald-950/80 border border-slate-700 hover:border-emerald-500 rounded-xl text-left transition flex items-center justify-between group cursor-pointer"
+          >
+            <div>
+              <p className="font-bold text-amber-300 group-hover:text-amber-200">🛡️ Super Admin</p>
+              <p className="text-slate-400 text-[10px]">Mobile: <span className="text-emerald-400 font-mono">9876543200</span> | Pass: <span className="font-mono text-slate-300">superadmin123</span></p>
+            </div>
+            <span className="px-2 py-1 bg-amber-600 text-white text-[10px] font-bold rounded-md">Login</span>
+          </button>
+
           <button
             onClick={() => handleDemo('admin')}
             className="p-2.5 bg-slate-800/80 hover:bg-emerald-950/80 border border-slate-700 hover:border-emerald-500 rounded-xl text-left transition flex items-center justify-between group cursor-pointer"

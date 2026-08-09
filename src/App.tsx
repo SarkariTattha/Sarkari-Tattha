@@ -45,6 +45,7 @@ const ProtectedRoute = ({
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (user.role === 'super_admin') return <Navigate to="/super-admin" replace />;
     if (user.role === 'admin') return <Navigate to="/admin" replace />;
     if (user.role === 'staff') return <Navigate to="/staff" replace />;
     return <Navigate to="/customer" replace />;
@@ -76,7 +77,7 @@ export function AppContent() {
           <Route
             path="/customer"
             element={
-              <ProtectedRoute allowedRoles={['customer', 'staff', 'admin']}>
+              <ProtectedRoute allowedRoles={['customer', 'staff', 'admin', 'super_admin']}>
                 <CustomerDashboard />
               </ProtectedRoute>
             }
@@ -84,7 +85,7 @@ export function AppContent() {
           <Route
             path="/staff"
             element={
-              <ProtectedRoute allowedRoles={['staff', 'admin']}>
+              <ProtectedRoute allowedRoles={['staff', 'admin', 'super_admin']}>
                 <StaffDashboard />
               </ProtectedRoute>
             }
@@ -92,7 +93,15 @@ export function AppContent() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute allowedRoles={['admin']}>
+              <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/super-admin"
+            element={
+              <ProtectedRoute allowedRoles={['super_admin', 'admin']}>
                 <AdminDashboard />
               </ProtectedRoute>
             }

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { query, run, logAudit } from '../db';
+import { query, run, logAudit, logDiffAudit } from '../db';
 import { authenticateToken, requireRole, AuthRequest } from '../middleware';
 
 const router = Router();
@@ -298,6 +298,13 @@ router.put('/:id/status', authenticateToken, requireRole('admin', 'staff'), asyn
       `UPDATE applications SET status = ?, status_notes = ?, updated_at = ? WHERE id = ?`,
       [status, status_notes || '', now, appId]
     );
+
+    if (app.status !== status) {
+      await logDiffAudit('APPLICATION', Number(appId), app.application_no, 'status', app.status, status, req.user?.name || 'Staff', req.user?.role || 'staff', 'STATUS_CHANGE');
+    }
+    if ((app.status_notes || '') !== (status_notes || '')) {
+      await logDiffAudit('APPLICATION', Number(appId), app.application_no, 'status_notes', app.status_notes || '', status_notes || '', req.user?.name || 'Staff', req.user?.role || 'staff', 'UPDATE');
+    }
 
     // Notify customer
     await run(

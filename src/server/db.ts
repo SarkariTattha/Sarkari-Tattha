@@ -195,13 +195,67 @@ function initTables(db: Database) {
       image_url TEXT NOT NULL,
       uploaded_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS daily_cash_register (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT UNIQUE NOT NULL,
+      opening_cash REAL NOT NULL DEFAULT 0.0,
+      cash_collections REAL NOT NULL DEFAULT 0.0,
+      cash_expenses REAL NOT NULL DEFAULT 0.0,
+      expected_closing REAL NOT NULL DEFAULT 0.0,
+      physical_cash REAL DEFAULT 0.0,
+      variance REAL DEFAULT 0.0,
+      notes TEXT,
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      opened_by TEXT,
+      closed_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_diff_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      entity_ref TEXT,
+      field_name TEXT NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      changed_by_name TEXT NOT NULL,
+      changed_by_role TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      ip_address TEXT
+    );
   `);
 
-  try {
-    db.run("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1");
-  } catch (e) {
-    // Column already exists
-  }
+  const safeAddColumn = (table: string, colDef: string) => {
+    try {
+      db.run(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+    } catch (e) {
+      // Column already exists
+    }
+  };
+
+  safeAddColumn("users", "is_active INTEGER NOT NULL DEFAULT 1");
+  safeAddColumn("users", "aadhaar_no TEXT");
+  safeAddColumn("users", "pan_no TEXT");
+  safeAddColumn("users", "voter_id TEXT");
+  safeAddColumn("users", "ration_card TEXT");
+  safeAddColumn("users", "dob TEXT");
+  safeAddColumn("users", "emergency_contact TEXT");
+  safeAddColumn("users", "advance_balance REAL DEFAULT 0.0");
+  safeAddColumn("users", "pending_dues REAL DEFAULT 0.0");
+  safeAddColumn("users", "permissions TEXT");
+
+  safeAddColumn("applications", "aadhaar_no TEXT");
+  safeAddColumn("applications", "pan_no TEXT");
+  safeAddColumn("applications", "voter_id TEXT");
+  safeAddColumn("applications", "ration_card TEXT");
+  safeAddColumn("applications", "emergency_contact TEXT");
+
+  safeAddColumn("payments", "payment_type TEXT DEFAULT 'PARTIAL'");
+  safeAddColumn("payments", "balance_after_payment REAL DEFAULT 0.0");
 
   seedDefaultData(db);
 }
@@ -583,5 +637,31 @@ export async function logAudit(userName: string, userRole: string, action: strin
     );
   } catch (err) {
     console.error('Audit log failed:', err);
+  }
+}
+
+export async function logDiffAudit(
+  entityType: string,
+  entityId: number,
+  entityRef: string,
+  fieldName: string,
+  oldValue: any,
+  newValue: any,
+  changedByName: string,
+  changedByRole: string,
+  actionType: string = 'UPDATE',
+  ipAddress: string = ''
+) {
+  try {
+    const timestamp = new Date().toISOString();
+    const oldStr = oldValue !== undefined && oldValue !== null ? String(oldValue) : '';
+    const newStr = newValue !== undefined && newValue !== null ? String(newValue) : '';
+    await run(
+      `INSERT INTO audit_diff_logs (entity_type, entity_id, entity_ref, field_name, old_value, new_value, changed_by_name, changed_by_role, action_type, timestamp, ip_address)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [entityType, entityId, entityRef, fieldName, oldStr, newStr, changedByName, changedByRole, actionType, timestamp, ipAddress]
+    );
+  } catch (err) {
+    console.error('Diff audit log failed:', err);
   }
 }

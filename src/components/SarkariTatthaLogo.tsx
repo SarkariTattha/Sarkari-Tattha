@@ -31,26 +31,33 @@ export const SarkariTatthaLogo: React.FC<LogoProps> = ({
     setImgError(false);
   }, [logoUrl]);
 
-  // Format brand name cleanly with Deep Blue & Green accent
+  // Format brand name cleanly with Deep Blue & Green accent with perfect baseline alignment
   const renderBrandTitle = () => {
-    if (!centerName) return 'Sarkari Tattha';
+    if (!centerName) {
+      return (
+        <span className={`font-black tracking-tight ${dim.title} uppercase inline-flex items-baseline flex-wrap gap-x-1.5 leading-tight`}>
+          <span className="text-slate-900">Sarkari</span>
+          <span className="text-[#0066B3]">Tattha</span>
+        </span>
+      );
+    }
 
     const words = centerName.split(' ');
     return (
-      <span className={`font-black tracking-tight ${dim.title} text-slate-900 uppercase flex items-center flex-wrap gap-x-1.5`}>
+      <span className={`font-extrabold tracking-tight ${dim.title} uppercase inline-flex items-baseline flex-wrap gap-x-1.5 leading-tight`}>
         {words.map((word, i) => {
           const lower = word.toLowerCase();
           if (lower === 'tattha' || lower === 'tatha') {
-            return <span key={i} className="text-[#0066B3]">{word}</span>;
+            return <span key={i} className="text-[#0066B3] font-black">{word}</span>;
           }
           if (lower === 'digital') {
             return (
-              <span key={i} className="px-1.5 py-0.5 bg-emerald-50 text-[#2E9B45] text-[10px] font-extrabold rounded-md tracking-wider uppercase border border-emerald-200">
+              <span key={i} className="text-[#2E9B45] font-black">
                 {word}
               </span>
             );
           }
-          return <span key={i} className="text-slate-900">{word}</span>;
+          return <span key={i} className="text-slate-900 font-extrabold">{word}</span>;
         })}
       </span>
     );
@@ -124,15 +131,12 @@ export const SarkariTatthaLogo: React.FC<LogoProps> = ({
       </div>
 
       {/* Typography */}
-      <div>
-        <div className="flex items-center space-x-2">
-          {renderBrandTitle()}
-        </div>
+      <div className="flex flex-col justify-center">
+        {renderBrandTitle()}
         {showSubtitle && tagline && (
-          <p className={`${dim.sub} text-slate-500 font-bold tracking-wider uppercase flex items-center space-x-1 mt-0.5`}>
-            <span className="inline-block w-2 h-0.5 bg-[#2E9B45] rounded-full"></span>
-            <span>{tagline}</span>
-            <span className="inline-block w-2 h-0.5 bg-[#0066B3] rounded-full"></span>
+          <p className={`${dim.sub} text-slate-500 font-bold tracking-wider uppercase flex items-center space-x-1.5 mt-0.5 leading-tight`}>
+            <span className="inline-block w-1.5 h-1.5 bg-[#2E9B45] rounded-full shrink-0"></span>
+            <span className="truncate">{tagline}</span>
           </p>
         )}
       </div>

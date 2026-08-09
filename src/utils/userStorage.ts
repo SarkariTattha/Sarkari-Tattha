@@ -1,6 +1,19 @@
 import { User } from '../types';
 
 export const DEFAULT_STATIC_USERS: Record<string, { pass: string; user: User }> = {
+  'superadmin@csc.com': {
+    pass: 'superadmin123',
+    user: {
+      id: 99,
+      name: 'Super System Administrator',
+      email: 'superadmin@csc.com',
+      mobile: '9876543200',
+      role: 'super_admin',
+      address: 'Central Server HQ',
+      created_at: '2026-01-01T00:00:00.000Z',
+      is_active: 1
+    }
+  },
   'admin@csc.com': {
     pass: 'admin123',
     user: {

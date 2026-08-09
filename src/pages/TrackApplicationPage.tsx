@@ -33,13 +33,34 @@ export const TrackApplicationPage: React.FC = () => {
 
     fetch(`/api/applications/track?app_no=${encodeURIComponent(no)}&mobile=${encodeURIComponent(mob)}`)
       .then((res) => {
-        if (!res.ok) throw new Error('Application not found with the provided Application ID and Mobile.');
+        if (!res.ok) throw new Error('Not found in database');
         return res.json();
       })
       .then((resData) => setData(resData))
-      .catch((err) => {
+      .catch(() => {
+        // Search local applications storage fallback
+        try {
+          const raw = localStorage.getItem('csc_local_applications');
+          if (raw) {
+            const list = JSON.parse(raw);
+            const cleanNo = no.trim().toLowerCase();
+            const cleanMob = mob.trim();
+            const found = list.find(
+              (item: any) =>
+                item.application_no &&
+                item.application_no.trim().toLowerCase() === cleanNo &&
+                String(item.customer_mobile).trim() === cleanMob
+            );
+            if (found) {
+              setData(found);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error('Error reading local applications:', e);
+        }
         setData(null);
-        setError(err.message);
+        setError('No application found with the provided Application ID and Mobile Number.');
       })
       .finally(() => setLoading(false));
   };

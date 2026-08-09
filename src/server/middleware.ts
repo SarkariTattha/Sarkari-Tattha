@@ -36,9 +36,10 @@ export function requireRole(...roles: UserRole[]) {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required.' });
     }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Access denied. You do not have permission for this action.' });
+    // super_admin has access to super_admin, admin, staff resources
+    if (req.user.role === 'super_admin' || roles.includes(req.user.role)) {
+      return next();
     }
-    next();
+    return res.status(403).json({ error: 'Access denied. You do not have permission for this action.' });
   };
 }

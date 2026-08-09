@@ -175,12 +175,12 @@ export const Navbar: React.FC = () => {
                   </button>
 
                   <Link
-                    to={user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/customer'}
+                    to={user.role === 'super_admin' ? '/super-admin' : user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/customer'}
                     className="flex items-center space-x-1.5 px-3.5 py-2 bg-[#0066B3] hover:bg-[#00508f] text-white rounded-xl font-bold text-xs transition uppercase tracking-wide shadow-xs"
                   >
                     <LayoutDashboard className="w-3.5 h-3.5 text-blue-200" />
                     <span className="hidden sm:inline">
-                      {user.role === 'admin' ? 'Admin Portal' : user.role === 'staff' ? 'Staff Portal' : 'My Portal'}
+                      {user.role === 'super_admin' ? 'Super Admin' : user.role === 'admin' ? 'Admin Portal' : user.role === 'staff' ? 'Staff Portal' : 'My Portal'}
                     </span>
                   </Link>
 
@@ -296,11 +296,11 @@ export const Navbar: React.FC = () => {
                   </div>
 
                   <Link
-                    to={user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/customer'}
+                    to={user.role === 'super_admin' ? '/super-admin' : user.role === 'admin' ? '/admin' : user.role === 'staff' ? '/staff' : '/customer'}
                     onClick={() => setMobileMenuOpen(false)}
                     className="block w-full text-center py-2.5 bg-emerald-700 text-white font-bold rounded-xl"
                   >
-                    Go to {user.role === 'admin' ? 'Admin Portal' : user.role === 'staff' ? 'Staff Portal' : 'My Dashboard'}
+                    Go to {user.role === 'super_admin' ? 'Super Admin Portal' : user.role === 'admin' ? 'Admin Portal' : user.role === 'staff' ? 'Staff Portal' : 'My Dashboard'}
                   </Link>
                   <button
                     onClick={() => {

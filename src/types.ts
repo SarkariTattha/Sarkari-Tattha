@@ -1,4 +1,16 @@
-export type UserRole = 'admin' | 'staff' | 'customer';
+export type UserRole = 'super_admin' | 'admin' | 'staff' | 'customer';
+
+export interface StaffPermissions {
+  can_approve_apps: boolean;
+  can_edit_apps: boolean;
+  can_delete_apps: boolean;
+  can_issue_receipts: boolean;
+  can_manage_expenses: boolean;
+  can_view_reports: boolean;
+  can_manage_cash: boolean;
+  can_manage_customers: boolean;
+  can_manage_services: boolean;
+}
 
 export interface User {
   id: number;
@@ -9,6 +21,15 @@ export interface User {
   address?: string;
   is_active?: number;
   created_at: string;
+  aadhaar_no?: string;
+  pan_no?: string;
+  voter_id?: string;
+  ration_card?: string;
+  dob?: string;
+  emergency_contact?: string;
+  advance_balance?: number;
+  pending_dues?: number;
+  permissions?: StaffPermissions;
 }
 
 export type ServiceCategoryType = 'CSC' | 'CSP' | 'OTHER';
@@ -57,6 +78,11 @@ export interface Application {
   customer_email: string;
   address: string;
   dob?: string;
+  aadhaar_no?: string;
+  pan_no?: string;
+  voter_id?: string;
+  ration_card?: string;
+  emergency_contact?: string;
   service_id: number;
   service_name: string;
   category: ServiceCategoryType;
@@ -91,6 +117,47 @@ export interface Payment {
   staff_name: string;
   payment_status: PaymentStatus;
   payment_date: string;
+}
+
+export interface DailyCashRegister {
+  id: number;
+  date: string; // YYYY-MM-DD
+  opening_cash: number;
+  cash_collections: number;
+  cash_expenses: number;
+  expected_closing: number;
+  physical_cash: number;
+  variance: number;
+  notes?: string;
+  status: 'OPEN' | 'RECONCILED' | 'LOCKED';
+  opened_by?: string;
+  closed_by?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuditDiffLog {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  entity_ref?: string;
+  field_name: string;
+  old_value?: string;
+  new_value?: string;
+  changed_by_name: string;
+  changed_by_role: string;
+  action_type: string;
+  timestamp: string;
+  ip_address?: string;
+}
+
+export interface DuplicateMatch {
+  matched_field: 'mobile' | 'aadhaar' | 'pan';
+  matched_value: string;
+  customer_id?: number;
+  customer_name: string;
+  customer_mobile: string;
+  existing_applications_count?: number;
 }
 
 export interface Expense {
